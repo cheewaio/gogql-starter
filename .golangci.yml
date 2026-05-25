@@ -1,0 +1,32 @@
+version: "2"
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gosec
+    - revive
+    - bodyclose
+    - gocritic
+    - gocyclo
+    - thelper
+    - usestdlibvars
+    - noctx
+  settings:
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+        - name: package-comments
+          disabled: true
+  exclusions:
+    generated: strict
+    paths:
+      - graph/generated.go
+      - graph/model/
+formatters:
+  enable:
+    - gofmt

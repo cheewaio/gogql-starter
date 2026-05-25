@@ -1,0 +1,51 @@
+scalar Time
+
+type Note {
+  id: ID!
+  content: String!
+  createdAt: Time!
+  modifiedAt: Time!
+  user: User!
+}
+
+type User {
+  id: ID!
+  username: String!
+}
+
+input NewNote {
+  content: String!
+}
+
+input UpdateNoteInput {
+  content: String
+}
+
+type NoteConnection {
+	items: [Note!]!
+	pageInfo: PageInfo!
+}
+
+type NoteResponse implements MutationResponse {
+	code: Int!
+	success: Boolean!
+	message: String
+	note: Note
+}
+
+type DeleteResponse implements MutationResponse {
+	code: Int!
+	success: Boolean!
+	message: String
+}
+
+extend type Query {
+	note(id: ID!): Note!
+	notes(input: PageInput, filter: FilterInput): NoteConnection!
+}
+
+extend type Mutation {
+	createNote(input: NewNote!): NoteResponse!
+	updateNote(id: ID!, input: UpdateNoteInput!): NoteResponse!
+	deleteNote(id: ID!): DeleteResponse!
+}

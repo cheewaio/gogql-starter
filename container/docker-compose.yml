@@ -1,0 +1,65 @@
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: container/Dockerfile
+      target: dev-stage
+      args:
+        PROJECT_DIR: ${PWD}
+    image: gogql-starter:latest
+    environment:
+      PORT: "4000"
+      DEBUG: "true"
+      PROD: "false"
+      SERVICE_ENVIRONMENT: "local"
+      JWT_SECRET: "dev-secret"
+      DATABASE_URL: "postgres://postgres:postgres@db:5432/app_db?sslmode=disable"
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: app_db
+    ports:
+      - "4000:4000"
+      - "4444:4444"
+    volumes:
+      - ../:${PWD}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: dhi.io/postgres:18-alpine3.22
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: app_db
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "5080:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    restart: unless-stopped
+
+volumes:
+  db_data:
+  pgadmin_data:

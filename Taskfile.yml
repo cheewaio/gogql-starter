@@ -1,0 +1,108 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+
+version: '3'
+
+vars:
+  GREETING: Hello, world!
+
+tasks:
+  default:
+    cmds:
+      - task --list
+    silent: true
+
+  install:
+    desc: Set up the project after first clone
+    cmds:
+      - go mod download
+      - task gen
+      - task hooks:install
+      - cmd: |
+          if [ ! -f .env ]; then cp .env.example .env; fi
+        silent: true
+      - echo "Setup complete. Run 'task run' or 'task dev' to start."
+
+  run:
+    desc: Run the application
+    cmds:
+      - go run cmd/main.go
+
+  dev:
+    desc: Run the application in development mode with live reload
+    cmds:
+      - DEBUG=true docker-compose -f container/docker-compose.yml up --build
+
+  build:
+    desc: Build the application
+    cmds:
+      - go build -o build/app cmd/main.go
+
+  image:
+    desc: Build the Docker image
+    cmds:
+      - docker buildx build -t gogql-starter .
+
+  gen:sqlc:
+    desc: Regenerate sqlc code from SQL queries
+    cmds:
+      - go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1 generate -f database/.sqlc.yml
+
+  gen:gqlgen:
+    desc: Regenerate GraphQL code from schema
+    cmds:
+      - go run github.com/99designs/gqlgen@v0.17.85 generate
+
+  gen:
+    desc: Regenerate all code (sqlc + gqlgen)
+    cmds:
+      - task: gen:sqlc
+      - task: gen:gqlgen
+  
+  test:
+    desc: Run tests with race detection
+    cmds:
+      - go test -race -count=1 ./...
+
+  test:cover:
+    desc: Run tests with coverage report
+    cmds:
+      - go test -race -count=1 -coverprofile=coverage.out ./...
+      - go tool cover -html=coverage.out -o coverage.html
+
+  lint:
+    desc: Run linters
+    cmds:
+      - go tool golangci-lint run ./...
+
+  lint:fix:
+    desc: Auto-fix lint issues
+    cmds:
+      - go tool golangci-lint run --fix ./...
+
+  hooks:install:
+    desc: Install pre-commit hook to lint staged Go files
+    cmds:
+      - |
+        cat > .git/hooks/pre-commit << 'GOEOF'
+        #!/bin/sh
+        set -e
+        staged=$(git diff --cached --name-only --diff-filter=ACMR | grep '\.go$' || true)
+        if [ -z "$staged" ]; then
+          exit 0
+        fi
+        echo "Running linters..."
+        go tool golangci-lint run ./...
+        GOEOF
+      - chmod +x .git/hooks/pre-commit
+      - echo "Pre-commit hook installed"
+
+  hooks:uninstall:
+    desc: Remove pre-commit hook
+    cmds:
+      - rm -f .git/hooks/pre-commit
+      - echo "Pre-commit hook removed"
+
+  token:
+    desc: "Generate a JWT access token (default user: user@example.com)"
+    cmds:
+      - 'go run ./cmd token {{default "user@example.com" .USERNAME}}'

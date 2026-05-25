@@ -1,0 +1,49 @@
+# Common base types — extended by entity schemas
+type Query
+type Mutation
+
+input PageInput {
+  page: Int! = 1
+  pageSize: Int! = 20
+}
+
+type PageInfo {
+  page: Int!
+  pageSize: Int!
+  total: Int!
+  totalPages: Int!
+}
+
+enum FilterOperator {
+  EQ
+  NEQ
+  CONTAINS
+  GT
+  GTE
+  LT
+  LTE
+  IS_NULL
+  IS_NOT_NULL
+}
+
+enum FilterLogic {
+  AND
+  OR
+}
+
+input FilterCriteria {
+  field: String!
+  operator: FilterOperator!
+  value: String
+}
+
+input FilterInput {
+  filters: [FilterCriteria!]
+  logic: FilterLogic! = AND
+}
+
+interface MutationResponse {
+  code: Int!
+  success: Boolean!
+  message: String
+}
