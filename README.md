@@ -39,21 +39,22 @@ The app runs at `http://localhost:4000/graphql` with **Apollo Sandbox** — a fu
 
 ## Development
 
-### Environment Variables
+### Environment Variables (Docker)
+
+All env vars have sensible defaults in `container/docker-compose.yml`. No `.env` file needed.
 
 | Variable | Default | Description |
 |---|---|---|
-| `DATABASE_URL` | — | PostgreSQL connection string (required) |
-| `JWT_SECRET` | — | Secret for signing/validating JWT tokens |
+| `DATABASE_URL` | `postgres://postgres:postgres@db:5432/app_db` | PostgreSQL connection string |
+| `JWT_SECRET` | `dev-secret` | Secret for signing/validating JWT tokens |
 | `PORT` | `4000` | Server port |
-| `DEBUG` | — | Enables Apollo Sandbox + root redirect |
+| `DEBUG` | `true` | Enables Apollo Sandbox + root redirect |
 
 ### Common Tasks
 
 ```bash
 task install        # First-clone setup (deps, codegen, hooks)
 task dev            # Docker Compose with live reload (DEBUG=true)
-task run            # Run locally (go run cmd/main.go)
 task build          # Build binary to build/app
 task test           # Run tests with race detection
 task test:cover     # Run tests with coverage report

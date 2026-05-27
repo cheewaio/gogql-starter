@@ -11,7 +11,6 @@ services:
       PORT: "4000"
       DEBUG: "true"
       PROD: "false"
-      SERVICE_ENVIRONMENT: "local"
       JWT_SECRET: "dev-secret"
       DATABASE_URL: "postgres://postgres:postgres@db:5432/app_db?sslmode=disable"
       DB_HOST: db

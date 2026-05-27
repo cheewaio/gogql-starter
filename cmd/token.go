@@ -14,7 +14,7 @@ func runToken(username string) {
 		secret = "dev-secret"
 		slog.Warn("JWT_SECRET not set, using dev-secret")
 	}
-
+	fmt.Printf("JWT_SECRET: %s\n", secret)
 	token, err := auth.GenerateToken(secret, &auth.User{Username: username})
 	if err != nil {
 		slog.Error("generate token", "error", err)

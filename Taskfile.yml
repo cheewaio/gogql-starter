@@ -17,15 +17,7 @@ tasks:
       - go mod download
       - task gen
       - task hooks:install
-      - cmd: |
-          if [ ! -f .env ]; then cp .env.example .env; fi
-        silent: true
-      - echo "Setup complete. Run 'task run' or 'task dev' to start."
-
-  run:
-    desc: Run the application
-    cmds:
-      - go run cmd/main.go
+      - echo "Setup complete. Run 'task dev' to start."
 
   dev:
     desc: Run the application in development mode with live reload

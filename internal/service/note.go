@@ -18,13 +18,14 @@ func NewNoteService(queries *store.Queries) *NoteService {
 	return &NoteService{queries: queries}
 }
 
-func (s *NoteService) Create(ctx context.Context, userID, username, content string) (*model.Note, error) {
+func (s *NoteService) Create(ctx context.Context, userID, username, title, content string) (*model.Note, error) {
 	uid, err := uuid.Parse(userID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid user id: %w", err)
 	}
 
 	t, err := s.queries.CreateNote(ctx, store.CreateNoteParams{
+		Title:   title,
 		Content: content,
 		UserID:  uid,
 	})
@@ -35,6 +36,7 @@ func (s *NoteService) Create(ctx context.Context, userID, username, content stri
 	slog.Info("created note", "id", t.ID.String())
 	return &model.Note{
 		ID:         t.ID.String(),
+		Title:      t.Title,
 		Content:    t.Content,
 		CreatedAt:  t.CreatedAt,
 		ModifiedAt: t.ModifiedAt,
@@ -60,7 +62,7 @@ func (s *NoteService) GetByID(ctx context.Context, userID, noteID string) (*mode
 	return t, nil
 }
 
-func (s *NoteService) Update(ctx context.Context, userID, noteID string, content *string) (*model.Note, error) {
+func (s *NoteService) Update(ctx context.Context, userID, noteID string, title, content *string) (*model.Note, error) {
 	uid, err := uuid.Parse(noteID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid note id: %w", err)
@@ -75,7 +77,7 @@ func (s *NoteService) Update(ctx context.Context, userID, noteID string, content
 		return nil, fmt.Errorf("note not found")
 	}
 
-	if _, err := s.queries.UpdateNotePartial(ctx, uid, content); err != nil {
+	if _, err := s.queries.UpdateNotePartial(ctx, uid, title, content); err != nil {
 		return nil, fmt.Errorf("update note: %w", err)
 	}
 
@@ -111,6 +113,10 @@ func (s *NoteService) Delete(ctx context.Context, userID, noteID string) error {
 	return nil
 }
 
-func (s *NoteService) List(ctx context.Context, page, pageSize int32, filters []*model.FilterCriteria, logic model.FilterLogic) (*model.NoteConnection, error) {
-	return s.queries.FindNotesPaginated(ctx, page, pageSize, filters, logic)
+func (s *NoteService) List(ctx context.Context, userID string, input store.QueryInput) (*model.NoteConnection, error) {
+	uid, err := uuid.Parse(userID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid user id: %w", err)
+	}
+	return s.queries.FindNotesPaginated(ctx, uid, input)
 }

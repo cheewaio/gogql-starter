@@ -65,6 +65,7 @@ type ComplexityRoot struct {
 		CreatedAt  func(childComplexity int) int
 		ID         func(childComplexity int) int
 		ModifiedAt func(childComplexity int) int
+		Title      func(childComplexity int) int
 		User       func(childComplexity int) int
 	}
 
@@ -81,13 +82,14 @@ type ComplexityRoot struct {
 	}
 
 	PageInfo struct {
-		Page       func(childComplexity int) int
-		PageSize   func(childComplexity int) int
-		Total      func(childComplexity int) int
-		TotalPages func(childComplexity int) int
+		EndCursor       func(childComplexity int) int
+		HasNextPage     func(childComplexity int) int
+		HasPreviousPage func(childComplexity int) int
+		StartCursor     func(childComplexity int) int
 	}
 
 	Query struct {
+		Me    func(childComplexity int) int
 		Note  func(childComplexity int, id string) int
 		Notes func(childComplexity int, input *model.PageInput, filter *model.FilterInput) int
 	}
@@ -104,6 +106,7 @@ type MutationResolver interface {
 	DeleteNote(ctx context.Context, id string) (*model.DeleteResponse, error)
 }
 type QueryResolver interface {
+	Me(ctx context.Context) (*model.User, error)
 	Note(ctx context.Context, id string) (*model.Note, error)
 	Notes(ctx context.Context, input *model.PageInput, filter *model.FilterInput) (*model.NoteConnection, error)
 }
@@ -204,6 +207,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Note.ModifiedAt(childComplexity), true
+	case "Note.title":
+		if e.complexity.Note.Title == nil {
+			break
+		}
+
+		return e.complexity.Note.Title(childComplexity), true
 	case "Note.user":
 		if e.complexity.Note.User == nil {
 			break
@@ -249,31 +258,37 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.NoteResponse.Success(childComplexity), true
 
-	case "PageInfo.page":
-		if e.complexity.PageInfo.Page == nil {
+	case "PageInfo.endCursor":
+		if e.complexity.PageInfo.EndCursor == nil {
 			break
 		}
 
-		return e.complexity.PageInfo.Page(childComplexity), true
-	case "PageInfo.pageSize":
-		if e.complexity.PageInfo.PageSize == nil {
+		return e.complexity.PageInfo.EndCursor(childComplexity), true
+	case "PageInfo.hasNextPage":
+		if e.complexity.PageInfo.HasNextPage == nil {
 			break
 		}
 
-		return e.complexity.PageInfo.PageSize(childComplexity), true
-	case "PageInfo.total":
-		if e.complexity.PageInfo.Total == nil {
+		return e.complexity.PageInfo.HasNextPage(childComplexity), true
+	case "PageInfo.hasPreviousPage":
+		if e.complexity.PageInfo.HasPreviousPage == nil {
 			break
 		}
 
-		return e.complexity.PageInfo.Total(childComplexity), true
-	case "PageInfo.totalPages":
-		if e.complexity.PageInfo.TotalPages == nil {
+		return e.complexity.PageInfo.HasPreviousPage(childComplexity), true
+	case "PageInfo.startCursor":
+		if e.complexity.PageInfo.StartCursor == nil {
 			break
 		}
 
-		return e.complexity.PageInfo.TotalPages(childComplexity), true
+		return e.complexity.PageInfo.StartCursor(childComplexity), true
 
+	case "Query.me":
+		if e.complexity.Query.Me == nil {
+			break
+		}
+
+		return e.complexity.Query.Me(childComplexity), true
 	case "Query.note":
 		if e.complexity.Query.Note == nil {
 			break
@@ -322,6 +337,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputFilterInput,
 		ec.unmarshalInputNewNote,
 		ec.unmarshalInputPageInput,
+		ec.unmarshalInputSortField,
 		ec.unmarshalInputUpdateNoteInput,
 	)
 	first := true
@@ -835,6 +851,35 @@ func (ec *executionContext) fieldContext_Note_id(_ context.Context, field graphq
 	return fc, nil
 }
 
+func (ec *executionContext) _Note_title(ctx context.Context, field graphql.CollectedField, obj *model.Note) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Note_title,
+		func(ctx context.Context) (any, error) {
+			return obj.Title, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Note_title(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Note",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Note_content(ctx context.Context, field graphql.CollectedField, obj *model.Note) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -983,6 +1028,8 @@ func (ec *executionContext) fieldContext_NoteConnection_items(_ context.Context,
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_Note_id(ctx, field)
+			case "title":
+				return ec.fieldContext_Note_title(ctx, field)
 			case "content":
 				return ec.fieldContext_Note_content(ctx, field)
 			case "createdAt":
@@ -1022,14 +1069,14 @@ func (ec *executionContext) fieldContext_NoteConnection_pageInfo(_ context.Conte
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
-			case "page":
-				return ec.fieldContext_PageInfo_page(ctx, field)
-			case "pageSize":
-				return ec.fieldContext_PageInfo_pageSize(ctx, field)
-			case "total":
-				return ec.fieldContext_PageInfo_total(ctx, field)
-			case "totalPages":
-				return ec.fieldContext_PageInfo_totalPages(ctx, field)
+			case "startCursor":
+				return ec.fieldContext_PageInfo_startCursor(ctx, field)
+			case "endCursor":
+				return ec.fieldContext_PageInfo_endCursor(ctx, field)
+			case "hasNextPage":
+				return ec.fieldContext_PageInfo_hasNextPage(ctx, field)
+			case "hasPreviousPage":
+				return ec.fieldContext_PageInfo_hasPreviousPage(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type PageInfo", field.Name)
 		},
@@ -1150,6 +1197,8 @@ func (ec *executionContext) fieldContext_NoteResponse_note(_ context.Context, fi
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_Note_id(ctx, field)
+			case "title":
+				return ec.fieldContext_Note_title(ctx, field)
 			case "content":
 				return ec.fieldContext_Note_content(ctx, field)
 			case "createdAt":
@@ -1165,117 +1214,152 @@ func (ec *executionContext) fieldContext_NoteResponse_note(_ context.Context, fi
 	return fc, nil
 }
 
-func (ec *executionContext) _PageInfo_page(ctx context.Context, field graphql.CollectedField, obj *model.PageInfo) (ret graphql.Marshaler) {
+func (ec *executionContext) _PageInfo_startCursor(ctx context.Context, field graphql.CollectedField, obj *model.PageInfo) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_PageInfo_page,
+		ec.fieldContext_PageInfo_startCursor,
 		func(ctx context.Context) (any, error) {
-			return obj.Page, nil
+			return obj.StartCursor, nil
 		},
 		nil,
-		ec.marshalNInt2int32,
+		ec.marshalOString2ᚖstring,
 		true,
-		true,
+		false,
 	)
 }
 
-func (ec *executionContext) fieldContext_PageInfo_page(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_PageInfo_startCursor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "PageInfo",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Int does not have child fields")
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
 }
 
-func (ec *executionContext) _PageInfo_pageSize(ctx context.Context, field graphql.CollectedField, obj *model.PageInfo) (ret graphql.Marshaler) {
+func (ec *executionContext) _PageInfo_endCursor(ctx context.Context, field graphql.CollectedField, obj *model.PageInfo) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_PageInfo_pageSize,
+		ec.fieldContext_PageInfo_endCursor,
 		func(ctx context.Context) (any, error) {
-			return obj.PageSize, nil
+			return obj.EndCursor, nil
 		},
 		nil,
-		ec.marshalNInt2int32,
+		ec.marshalOString2ᚖstring,
 		true,
-		true,
+		false,
 	)
 }
 
-func (ec *executionContext) fieldContext_PageInfo_pageSize(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_PageInfo_endCursor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "PageInfo",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Int does not have child fields")
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
 }
 
-func (ec *executionContext) _PageInfo_total(ctx context.Context, field graphql.CollectedField, obj *model.PageInfo) (ret graphql.Marshaler) {
+func (ec *executionContext) _PageInfo_hasNextPage(ctx context.Context, field graphql.CollectedField, obj *model.PageInfo) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_PageInfo_total,
+		ec.fieldContext_PageInfo_hasNextPage,
 		func(ctx context.Context) (any, error) {
-			return obj.Total, nil
+			return obj.HasNextPage, nil
 		},
 		nil,
-		ec.marshalNInt2int32,
+		ec.marshalNBoolean2bool,
 		true,
 		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_PageInfo_total(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_PageInfo_hasNextPage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "PageInfo",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Int does not have child fields")
+			return nil, errors.New("field of type Boolean does not have child fields")
 		},
 	}
 	return fc, nil
 }
 
-func (ec *executionContext) _PageInfo_totalPages(ctx context.Context, field graphql.CollectedField, obj *model.PageInfo) (ret graphql.Marshaler) {
+func (ec *executionContext) _PageInfo_hasPreviousPage(ctx context.Context, field graphql.CollectedField, obj *model.PageInfo) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_PageInfo_totalPages,
+		ec.fieldContext_PageInfo_hasPreviousPage,
 		func(ctx context.Context) (any, error) {
-			return obj.TotalPages, nil
+			return obj.HasPreviousPage, nil
 		},
 		nil,
-		ec.marshalNInt2int32,
+		ec.marshalNBoolean2bool,
 		true,
 		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_PageInfo_totalPages(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_PageInfo_hasPreviousPage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "PageInfo",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Int does not have child fields")
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_me(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_me,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Query().Me(ctx)
+		},
+		nil,
+		ec.marshalNUser2ᚖgithubᚗcomᚋcheewaioᚋgogqlᚑstarterᚋgraphᚋmodelᚐUser,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_me(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_User_id(ctx, field)
+			case "username":
+				return ec.fieldContext_User_username(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
 	}
 	return fc, nil
@@ -1308,6 +1392,8 @@ func (ec *executionContext) fieldContext_Query_note(ctx context.Context, field g
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_Note_id(ctx, field)
+			case "title":
+				return ec.fieldContext_Note_title(ctx, field)
 			case "content":
 				return ec.fieldContext_Note_content(ctx, field)
 			case "createdAt":
@@ -3079,13 +3165,20 @@ func (ec *executionContext) unmarshalInputNewNote(ctx context.Context, obj any) 
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"content"}
+	fieldsInOrder := [...]string{"title", "content"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
 			continue
 		}
 		switch k {
+		case "title":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("title"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Title = data
 		case "content":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("content"))
 			data, err := ec.unmarshalNString2string(ctx, v)
@@ -3106,34 +3199,82 @@ func (ec *executionContext) unmarshalInputPageInput(ctx context.Context, obj any
 		asMap[k] = v
 	}
 
-	if _, present := asMap["page"]; !present {
-		asMap["page"] = 1
-	}
-	if _, present := asMap["pageSize"]; !present {
-		asMap["pageSize"] = 20
-	}
-
-	fieldsInOrder := [...]string{"page", "pageSize"}
+	fieldsInOrder := [...]string{"first", "after", "last", "before", "sort"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
 			continue
 		}
 		switch k {
-		case "page":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("page"))
-			data, err := ec.unmarshalNInt2int32(ctx, v)
+		case "first":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("first"))
+			data, err := ec.unmarshalOInt2ᚖint32(ctx, v)
 			if err != nil {
 				return it, err
 			}
-			it.Page = data
-		case "pageSize":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("pageSize"))
-			data, err := ec.unmarshalNInt2int32(ctx, v)
+			it.First = data
+		case "after":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("after"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
 			if err != nil {
 				return it, err
 			}
-			it.PageSize = data
+			it.After = data
+		case "last":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("last"))
+			data, err := ec.unmarshalOInt2ᚖint32(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Last = data
+		case "before":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("before"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Before = data
+		case "sort":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sort"))
+			data, err := ec.unmarshalOSortField2ᚕᚖgithubᚗcomᚋcheewaioᚋgogqlᚑstarterᚋgraphᚋmodelᚐSortFieldᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Sort = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputSortField(ctx context.Context, obj any) (model.SortField, error) {
+	var it model.SortField
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"field", "asc"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "field":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("field"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Field = data
+		case "asc":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("asc"))
+			data, err := ec.unmarshalNBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Asc = data
 		}
 	}
 
@@ -3147,13 +3288,20 @@ func (ec *executionContext) unmarshalInputUpdateNoteInput(ctx context.Context, o
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"content"}
+	fieldsInOrder := [...]string{"title", "content"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
 			continue
 		}
 		switch k {
+		case "title":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("title"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Title = data
 		case "content":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("content"))
 			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
@@ -3327,6 +3475,11 @@ func (ec *executionContext) _Note(ctx context.Context, sel ast.SelectionSet, obj
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "title":
+			out.Values[i] = ec._Note_title(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "content":
 			out.Values[i] = ec._Note_content(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -3473,23 +3626,17 @@ func (ec *executionContext) _PageInfo(ctx context.Context, sel ast.SelectionSet,
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("PageInfo")
-		case "page":
-			out.Values[i] = ec._PageInfo_page(ctx, field, obj)
+		case "startCursor":
+			out.Values[i] = ec._PageInfo_startCursor(ctx, field, obj)
+		case "endCursor":
+			out.Values[i] = ec._PageInfo_endCursor(ctx, field, obj)
+		case "hasNextPage":
+			out.Values[i] = ec._PageInfo_hasNextPage(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "pageSize":
-			out.Values[i] = ec._PageInfo_pageSize(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "total":
-			out.Values[i] = ec._PageInfo_total(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "totalPages":
-			out.Values[i] = ec._PageInfo_totalPages(ctx, field, obj)
+		case "hasPreviousPage":
+			out.Values[i] = ec._PageInfo_hasPreviousPage(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -3535,6 +3682,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("Query")
+		case "me":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_me(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "note":
 			field := field
 
@@ -4177,6 +4346,11 @@ func (ec *executionContext) marshalNPageInfo2ᚖgithubᚗcomᚋcheewaioᚋgogql�
 	return ec._PageInfo(ctx, sel, v)
 }
 
+func (ec *executionContext) unmarshalNSortField2ᚖgithubᚗcomᚋcheewaioᚋgogqlᚑstarterᚋgraphᚋmodelᚐSortField(ctx context.Context, v any) (*model.SortField, error) {
+	res, err := ec.unmarshalInputSortField(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNString2string(ctx context.Context, v any) (string, error) {
 	res, err := graphql.UnmarshalString(v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -4212,6 +4386,10 @@ func (ec *executionContext) marshalNTime2timeᚐTime(ctx context.Context, sel as
 func (ec *executionContext) unmarshalNUpdateNoteInput2githubᚗcomᚋcheewaioᚋgogqlᚑstarterᚋgraphᚋmodelᚐUpdateNoteInput(ctx context.Context, v any) (model.UpdateNoteInput, error) {
 	res, err := ec.unmarshalInputUpdateNoteInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNUser2githubᚗcomᚋcheewaioᚋgogqlᚑstarterᚋgraphᚋmodelᚐUser(ctx context.Context, sel ast.SelectionSet, v model.User) graphql.Marshaler {
+	return ec._User(ctx, sel, &v)
 }
 
 func (ec *executionContext) marshalNUser2ᚖgithubᚗcomᚋcheewaioᚋgogqlᚑstarterᚋgraphᚋmodelᚐUser(ctx context.Context, sel ast.SelectionSet, v *model.User) graphql.Marshaler {
@@ -4533,6 +4711,24 @@ func (ec *executionContext) unmarshalOFilterInput2ᚖgithubᚗcomᚋcheewaioᚋg
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalOInt2ᚖint32(ctx context.Context, v any) (*int32, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := graphql.UnmarshalInt32(v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOInt2ᚖint32(ctx context.Context, sel ast.SelectionSet, v *int32) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	_ = sel
+	_ = ctx
+	res := graphql.MarshalInt32(*v)
+	return res
+}
+
 func (ec *executionContext) marshalONote2ᚖgithubᚗcomᚋcheewaioᚋgogqlᚑstarterᚋgraphᚋmodelᚐNote(ctx context.Context, sel ast.SelectionSet, v *model.Note) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
@@ -4546,6 +4742,24 @@ func (ec *executionContext) unmarshalOPageInput2ᚖgithubᚗcomᚋcheewaioᚋgog
 	}
 	res, err := ec.unmarshalInputPageInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalOSortField2ᚕᚖgithubᚗcomᚋcheewaioᚋgogqlᚑstarterᚋgraphᚋmodelᚐSortFieldᚄ(ctx context.Context, v any) ([]*model.SortField, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*model.SortField, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNSortField2ᚖgithubᚗcomᚋcheewaioᚋgogqlᚑstarterᚋgraphᚋmodelᚐSortField(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
 }
 
 func (ec *executionContext) unmarshalOString2ᚖstring(ctx context.Context, v any) (*string, error) {

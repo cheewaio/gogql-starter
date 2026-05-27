@@ -1,51 +1,72 @@
 scalar Time
 
+"""A user-created note with title, content, and metadata."""
 type Note {
   id: ID!
+  title: String!
   content: String!
   createdAt: Time!
   modifiedAt: Time!
+  """The user who owns this note."""
   user: User!
 }
 
+"""A user of the system."""
 type User {
   id: ID!
   username: String!
 }
 
+"""Input for creating a new note. `title` is required."""
 input NewNote {
+  title: String!
   content: String!
 }
 
+"""Input for updating an existing note. All fields are optional — only provided fields are updated."""
 input UpdateNoteInput {
+  title: String
   content: String
 }
 
+"""A paginated list of notes wrapped with cursor-based pagination metadata."""
 type NoteConnection {
-	items: [Note!]!
-	pageInfo: PageInfo!
+  items: [Note!]!
+  pageInfo: PageInfo!
 }
 
 type NoteResponse implements MutationResponse {
-	code: Int!
-	success: Boolean!
-	message: String
-	note: Note
+  code: Int!
+  success: Boolean!
+  message: String
+  note: Note
 }
 
 type DeleteResponse implements MutationResponse {
-	code: Int!
-	success: Boolean!
-	message: String
+  code: Int!
+  success: Boolean!
+  message: String
 }
 
 extend type Query {
-	note(id: ID!): Note!
-	notes(input: PageInput, filter: FilterInput): NoteConnection!
+  """The currently authenticated user. Requires a valid JWT token."""
+  me: User!
+  """Fetch a single note by ID. Only returns notes owned by the current user."""
+  note(id: ID!): Note!
+  """
+  Paginated list of notes owned by the current user.
+
+  Supports cursor-based pagination (`PageInput`), dynamic filtering (`FilterInput`),
+  and custom sorting (`SortField`). Requires authentication.
+  """
+  notes(input: PageInput, filter: FilterInput): NoteConnection!
 }
 
 extend type Mutation {
-	createNote(input: NewNote!): NoteResponse!
-	updateNote(id: ID!, input: UpdateNoteInput!): NoteResponse!
-	deleteNote(id: ID!): DeleteResponse!
+  """Create a new note. The current user is set as the owner."""
+  createNote(input: NewNote!): NoteResponse!
+  """Update an existing note. Only fields included in the input are updated."""
+  updateNote(id: ID!, input: UpdateNoteInput!): NoteResponse!
+  """Delete a note permanently. Requires ownership."""
+  deleteNote(id: ID!): DeleteResponse!
 }

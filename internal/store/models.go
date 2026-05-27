@@ -12,6 +12,7 @@ import (
 
 type Note struct {
 	ID         uuid.UUID
+	Title      string
 	Content    string
 	CreatedAt  time.Time
 	ModifiedAt time.Time

@@ -10,10 +10,9 @@ import (
 	"github.com/google/uuid"
 )
 
-// GetNoteByIDWithUser fetches a single note by ID, joining the user info.
 func (q *Queries) GetNoteByIDWithUser(ctx context.Context, id uuid.UUID) (*model.Note, error) {
 	query := `
-		SELECT t.id, t.content, t.created_at, t.modified_at, t.user_id, u.username
+		SELECT t.id, t.title, t.content, t.created_at, t.modified_at, t.user_id, u.username
 		FROM notes t
 		JOIN users u ON u.id = t.user_id
 		WHERE t.id = $1
@@ -26,7 +25,7 @@ func (q *Queries) GetNoteByIDWithUser(ctx context.Context, id uuid.UUID) (*model
 		username   string
 		note       model.Note
 	)
-	err := q.db.QueryRowContext(ctx, query, id).Scan(&noteID, &note.Content, &createdAt, &modifiedAt, &userID, &username)
+	err := q.db.QueryRowContext(ctx, query, id).Scan(&noteID, &note.Title, &note.Content, &createdAt, &modifiedAt, &userID, &username)
 	if err != nil {
 		return nil, fmt.Errorf("get note: %w", err)
 	}
@@ -37,13 +36,17 @@ func (q *Queries) GetNoteByIDWithUser(ctx context.Context, id uuid.UUID) (*model
 	return &note, nil
 }
 
-// UpdateNotePartial updates the content field of a note, bumping modified_at.
-func (q *Queries) UpdateNotePartial(ctx context.Context, id uuid.UUID, content *string) (Note, error) {
+func (q *Queries) UpdateNotePartial(ctx context.Context, id uuid.UUID, title, content *string) (Note, error) {
 	var (
 		sets []string
 		args []any
 		idx  int
 	)
+	if title != nil {
+		idx++
+		sets = append(sets, fmt.Sprintf("title = $%d", idx))
+		args = append(args, *title)
+	}
 	if content != nil {
 		idx++
 		sets = append(sets, fmt.Sprintf("content = $%d", idx))
@@ -61,6 +64,7 @@ func (q *Queries) UpdateNotePartial(ctx context.Context, id uuid.UUID, content *
 	var i Note
 	err := row.Scan(
 		&i.ID,
+		&i.Title,
 		&i.Content,
 		&i.CreatedAt,
 		&i.ModifiedAt,
@@ -69,11 +73,95 @@ func (q *Queries) UpdateNotePartial(ctx context.Context, id uuid.UUID, content *
 	return i, err
 }
 
+func directionOp(asc, forward bool) string {
+	if asc == forward {
+		return ">"
+	}
+	return "<"
+}
+
+func buildCursorWhereClause(sortFields []SortField, cursor *Cursor, forward bool, argIdx *int, args *[]any) string {
+	var orClauses []string
+
+	for i := range sortFields {
+		var andParts []string
+
+		for j := 0; j < i; j++ {
+			*argIdx++
+			*args = append(*args, cursor.SortValues[j])
+			andParts = append(andParts, fmt.Sprintf("t.%s = $%d", sortFields[j].Field, *argIdx))
+		}
+
+		*argIdx++
+		*args = append(*args, cursor.SortValues[i])
+		op := directionOp(sortFields[i].Asc, forward)
+		andParts = append(andParts, fmt.Sprintf("t.%s %s $%d", sortFields[i].Field, op, *argIdx))
+
+		orClauses = append(orClauses, "("+strings.Join(andParts, " AND ")+")")
+	}
+
+	var idParts []string
+	for j := 0; j < len(sortFields); j++ {
+		*argIdx++
+		*args = append(*args, cursor.SortValues[j])
+		idParts = append(idParts, fmt.Sprintf("t.%s = $%d", sortFields[j].Field, *argIdx))
+	}
+	*argIdx++
+	*args = append(*args, cursor.ID)
+	idOp := ">"
+	if !forward {
+		idOp = "<"
+	}
+	idParts = append(idParts, fmt.Sprintf("t.id %s $%d", idOp, *argIdx))
+	orClauses = append(orClauses, "("+strings.Join(idParts, " AND ")+")")
+
+	return "(" + strings.Join(orClauses, " OR ") + ")"
+}
+
+func buildSortOrder(sortFields []SortField, forward bool) string {
+	var clauses []string
+	for _, sf := range sortFields {
+		dir := "ASC"
+		if forward == sf.Asc {
+			dir = "DESC"
+		}
+		clauses = append(clauses, fmt.Sprintf("t.%s %s", sf.Field, dir))
+	}
+	if forward {
+		clauses = append(clauses, "t.id ASC")
+	} else {
+		clauses = append(clauses, "t.id DESC")
+	}
+	return strings.Join(clauses, ", ")
+}
+
+func sortValueFromNote(note *model.Note, field string) string {
+	switch field {
+	case "created_at":
+		return note.CreatedAt.Format(time.RFC3339Nano)
+	case "modified_at":
+		return note.ModifiedAt.Format(time.RFC3339Nano)
+	case "title":
+		return note.Title
+	case "id":
+		return note.ID
+	default:
+		return ""
+	}
+}
+
+func sortValuesFromNote(note *model.Note, sortFields []SortField) []string {
+	vals := make([]string, len(sortFields))
+	for i, sf := range sortFields {
+		vals[i] = sortValueFromNote(note, sf.Field)
+	}
+	return vals
+}
+
 func (q *Queries) FindNotesPaginated(
 	ctx context.Context,
-	page, pageSize int32,
-	filters []*model.FilterCriteria,
-	logic model.FilterLogic,
+	userID uuid.UUID,
+	input QueryInput,
 ) (*model.NoteConnection, error) {
 	var (
 		whereClauses []string
@@ -81,7 +169,36 @@ func (q *Queries) FindNotesPaginated(
 		argIdx       int
 	)
 
-	for _, f := range filters {
+	argIdx++
+	whereClauses = append(whereClauses, fmt.Sprintf("t.user_id = $%d", argIdx))
+	args = append(args, userID)
+
+	forward := input.Before == nil
+	useFirst := input.Before == nil
+
+	var cursor *Cursor
+	if input.After != nil {
+		cursor = input.After
+	} else if input.Before != nil {
+		cursor = input.Before
+	}
+
+	limit := input.First
+	if !useFirst {
+		limit = input.Last
+	}
+
+	sortFields := input.Sort
+	if len(sortFields) == 0 {
+		sortFields = []SortField{{Field: "created_at", Asc: false}}
+	}
+
+	if cursor != nil {
+		clause := buildCursorWhereClause(sortFields, cursor, forward, &argIdx, &args)
+		whereClauses = append(whereClauses, clause)
+	}
+
+	for _, f := range input.Filters {
 		if f == nil {
 			continue
 		}
@@ -94,37 +211,20 @@ func (q *Queries) FindNotesPaginated(
 		}
 	}
 
-	whereSQL := ""
-	if len(whereClauses) > 0 {
-		op := "AND"
-		if logic == model.FilterLogicOr {
-			op = "OR"
-		}
-		whereSQL = "WHERE " + strings.Join(whereClauses, " "+op+" ")
-	}
+	whereSQL := strings.Join(whereClauses, " AND ")
 
-	var total int32
-	countQuery := "SELECT COUNT(*) FROM notes " + whereSQL
-	if err := q.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
-		return nil, fmt.Errorf("count notes: %w", err)
-	}
-
-	offset := (page - 1) * pageSize
-	totalPages := (total + pageSize - 1) / pageSize
-	if totalPages < 1 {
-		totalPages = 1
-	}
+	orderSQL := buildSortOrder(sortFields, forward)
 
 	query := fmt.Sprintf(`
-		SELECT t.id, t.content, t.created_at, t.modified_at, t.user_id, u.username
+		SELECT t.id, t.title, t.content, t.created_at, t.modified_at, t.user_id, u.username
 		FROM notes t
 		JOIN users u ON u.id = t.user_id
-		%s
-		ORDER BY t.id
-		LIMIT $%d OFFSET $%d
-	`, whereSQL, argIdx+1, argIdx+2)
+		WHERE %s
+		ORDER BY %s
+		LIMIT $%d
+	`, whereSQL, orderSQL, argIdx+1)
 
-	args = append(args, pageSize, offset)
+	args = append(args, limit+1)
 
 	rows, err := q.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -138,34 +238,66 @@ func (q *Queries) FindNotesPaginated(
 			noteID     uuid.UUID
 			createdAt  time.Time
 			modifiedAt time.Time
-			userID     uuid.UUID
+			uid        uuid.UUID
 			username   string
 			note       model.Note
 		)
-		if err := rows.Scan(&noteID, &note.Content, &createdAt, &modifiedAt, &userID, &username); err != nil {
+		if err := rows.Scan(&noteID, &note.Title, &note.Content, &createdAt, &modifiedAt, &uid, &username); err != nil {
 			return nil, fmt.Errorf("scan note: %w", err)
 		}
 		note.ID = noteID.String()
 		note.CreatedAt = createdAt
 		note.ModifiedAt = modifiedAt
-		note.User = &model.User{ID: userID.String(), Username: username}
+		note.User = &model.User{ID: uid.String(), Username: username}
 		items = append(items, &note)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("rows iteration: %w", err)
 	}
 
+	if !useFirst {
+		for i, j := 0, len(items)-1; i < j; i, j = i+1, j-1 {
+			items[i], items[j] = items[j], items[i]
+		}
+	}
+
+	hasNextPage := false
+	hasPreviousPage := false
+	if len(items) > int(limit) {
+		if forward {
+			hasNextPage = true
+		} else {
+			hasPreviousPage = true
+		}
+		items = items[:limit]
+	}
+
+	if hasPreviousPage || (forward && input.After != nil) {
+		hasPreviousPage = true
+	}
+	if hasNextPage || (!forward && input.Before != nil) {
+		hasNextPage = true
+	}
+
 	if items == nil {
 		items = []*model.Note{}
+	}
+
+	var startCursor, endCursor *string
+	if len(items) > 0 {
+		sc := EncodeCursor(sortValuesFromNote(items[0], sortFields), items[0].ID)
+		startCursor = &sc
+		ec := EncodeCursor(sortValuesFromNote(items[len(items)-1], sortFields), items[len(items)-1].ID)
+		endCursor = &ec
 	}
 
 	return &model.NoteConnection{
 		Items: items,
 		PageInfo: &model.PageInfo{
-			Page:       page,
-			PageSize:   pageSize,
-			Total:      total,
-			TotalPages: totalPages,
+			StartCursor:     startCursor,
+			EndCursor:       endCursor,
+			HasNextPage:     hasNextPage,
+			HasPreviousPage: hasPreviousPage,
 		},
 	}, nil
 }

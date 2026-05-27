@@ -9,6 +9,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
+
 	"github.com/cheewaio/gogql-starter/graph/model"
 	"github.com/cheewaio/gogql-starter/graph/response"
 )
@@ -19,7 +21,7 @@ func (r *mutationResolver) CreateNote(ctx context.Context, input model.NewNote) 
 	if user == nil {
 		return response.Failure(ctx, &model.NoteResponse{}, fmt.Errorf("authentication required"))
 	}
-	note, err := r.NoteService.Create(ctx, user.Username, user.Username, input.Content)
+	note, err := r.NoteService.Create(ctx, user.Username, user.Username, input.Title, input.Content)
 	if err != nil {
 		return response.Failure(ctx, &model.NoteResponse{}, err)
 	}
@@ -32,7 +34,7 @@ func (r *mutationResolver) UpdateNote(ctx context.Context, id string, input mode
 	if user == nil {
 		return response.Failure(ctx, &model.NoteResponse{}, fmt.Errorf("authentication required"))
 	}
-	note, err := r.NoteService.Update(ctx, user.Username, id, input.Content)
+	note, err := r.NoteService.Update(ctx, user.Username, id, input.Title, input.Content)
 	if err != nil {
 		return response.Failure(ctx, &model.NoteResponse{}, err)
 	}
@@ -51,6 +53,16 @@ func (r *mutationResolver) DeleteNote(ctx context.Context, id string) (*model.De
 	return response.Success(ctx, &model.DeleteResponse{})
 }
 
+// Me is the resolver for the me field.
+func (r *queryResolver) Me(ctx context.Context) (*model.User, error) {
+	user := r.GetCurrentUser(ctx)
+	if user == nil {
+		return nil, fmt.Errorf("authentication required")
+	}
+	id := uuid.NewSHA1(uuid.NameSpaceDNS, []byte(user.Username)).String()
+	return &model.User{ID: id, Username: user.Username}, nil
+}
+
 // Note is the resolver for the note field.
 func (r *queryResolver) Note(ctx context.Context, id string) (*model.Note, error) {
 	user := r.GetCurrentUser(ctx)
@@ -62,6 +74,13 @@ func (r *queryResolver) Note(ctx context.Context, id string) (*model.Note, error
 
 // Notes is the resolver for the notes field.
 func (r *queryResolver) Notes(ctx context.Context, input *model.PageInput, filter *model.FilterInput) (*model.NoteConnection, error) {
-	q := parseQueryInput(input, filter)
-	return r.NoteService.List(ctx, q.Page, q.PageSize, q.Filters, q.FilterLogic)
+	user := r.GetCurrentUser(ctx)
+	if user == nil {
+		return nil, fmt.Errorf("authentication required")
+	}
+	q, err := parseQueryInput(input, filter)
+	if err != nil {
+		return nil, err
+	}
+	return r.NoteService.List(ctx, user.Username, q)
 }

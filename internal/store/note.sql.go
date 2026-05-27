@@ -12,21 +12,23 @@ import (
 )
 
 const createNote = `-- name: CreateNote :one
-INSERT INTO notes (content, user_id)
-VALUES ($1, $2)
-RETURNING id, content, created_at, modified_at, user_id
+INSERT INTO notes (title, content, user_id)
+VALUES ($1, $2, $3)
+RETURNING id, title, content, created_at, modified_at, user_id
 `
 
 type CreateNoteParams struct {
+	Title   string
 	Content string
 	UserID  uuid.UUID
 }
 
 func (q *Queries) CreateNote(ctx context.Context, arg CreateNoteParams) (Note, error) {
-	row := q.db.QueryRowContext(ctx, createNote, arg.Content, arg.UserID)
+	row := q.db.QueryRowContext(ctx, createNote, arg.Title, arg.Content, arg.UserID)
 	var i Note
 	err := row.Scan(
 		&i.ID,
+		&i.Title,
 		&i.Content,
 		&i.CreatedAt,
 		&i.ModifiedAt,
@@ -45,7 +47,7 @@ func (q *Queries) DeleteNote(ctx context.Context, id uuid.UUID) error {
 }
 
 const getNoteByID = `-- name: GetNoteByID :one
-SELECT id, content, created_at, modified_at, user_id FROM notes WHERE id = $1
+SELECT id, title, content, created_at, modified_at, user_id FROM notes WHERE id = $1
 `
 
 func (q *Queries) GetNoteByID(ctx context.Context, id uuid.UUID) (Note, error) {
@@ -53,6 +55,7 @@ func (q *Queries) GetNoteByID(ctx context.Context, id uuid.UUID) (Note, error) {
 	var i Note
 	err := row.Scan(
 		&i.ID,
+		&i.Title,
 		&i.Content,
 		&i.CreatedAt,
 		&i.ModifiedAt,

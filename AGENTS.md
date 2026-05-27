@@ -6,8 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Common Tasks
 - **First-clone setup**: `task install` (deps, codegen, git hooks)
-- **Run application**: `task run`
-- **Development mode (Docker + live reload)**: `task dev`
+- **Run application (Docker + live reload)**: `task dev`
 - **Build binary**: `task build` (outputs to `bin/app`)
 - **Build Docker image**: `task image`
 - **Run tests**: `task test` (with race detection)
@@ -53,8 +52,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Infrastructure**:
     - Docker-based development and deployment configured in `container/` (includes `docker-compose.yml` and `Dockerfile`).
 
-### Environment Variables
-- `DATABASE_URL`: Connection string for the PostgreSQL database (required for migrations).
-- `JWT_SECRET`: Secret key for signing and validating JWT tokens.
-- `PORT`: Port on which the server will listen (defaults to `4000`).
-- `DEBUG`: When set to `true`, enables Apollo Sandbox IDE and root-to-graphql redirect.
+### Environment Variables (Docker)
+All env vars have sensible defaults in `container/docker-compose.yml`. No `.env` file needed.
+- `DATABASE_URL`: PostgreSQL connection (defaults to `postgres://postgres:postgres@db:5432/app_db`).
+- `JWT_SECRET`: Secret for signing/validating JWT tokens (defaults to `dev-secret`).
+- `PORT`: Server port (defaults to `4000`).
+- `DEBUG`: Enables Apollo Sandbox IDE + root redirect (defaults to `true` in dev).

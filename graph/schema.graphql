@@ -2,18 +2,58 @@
 type Query
 type Mutation
 
+"""Sort direction for a single field in paginated queries."""
+input SortField {
+  """Field name to sort by (e.g. "created_at", "title")."""
+  field: String!
+  """True for ascending order, false for descending."""
+  asc: Boolean!
+}
+
+"""
+Cursor-based pagination input. Use one direction per request:
+
+- **Forward**: `first` + `after` → "Load more" / "Next page"
+- **Backward**: `last` + `before` → "Previous page"
+- **First page**: `first` with no cursor
+
+`first` and `last` are mutually exclusive. `after` and `before` are mutually exclusive.
+Defaults to `first: 10` when no cursor is provided.
+Values are clamped to [1, 50].
+"""
 input PageInput {
-  page: Int! = 1
-  pageSize: Int! = 20
+  """Number of items to fetch when moving forward. Default: 10."""
+  first: Int
+  """Opaque cursor from a previous response's `endCursor`. Fetch items after this cursor."""
+  after: String
+  """Number of items to fetch when moving backward. Default: 10."""
+  last: Int
+  """Opaque cursor from a previous response's `startCursor`. Fetch items before this cursor."""
+  before: String
+  """Sort fields. Defaults to `[{ field: "created_at", asc: false }]` (newest first)."""
+  sort: [SortField!]
 }
 
+"""Pagination metadata returned with every paginated query."""
 type PageInfo {
-  page: Int!
-  pageSize: Int!
-  total: Int!
-  totalPages: Int!
+  """Cursor of the first item on this page. Pass as `before` to fetch the previous page. Null when the result set is empty."""
+  startCursor: String
+  """Cursor of the last item on this page. Pass as `after` to fetch the next page. Null when the result set is empty."""
+  endCursor: String
+  """Whether more items exist after this page."""
+  hasNextPage: Boolean!
+  """Whether more items exist before this page."""
+  hasPreviousPage: Boolean!
 }
 
+"""
+Comparison operators for dynamic filtering.
+
+- `EQ` / `NEQ`: exact match / not equal
+- `CONTAINS`: case-insensitive substring match
+- `GT` / `GTE` / `LT` / `LTE`: comparisons (works on timestamps, numbers, strings)
+- `IS_NULL` / `IS_NOT_NULL`: null checks (`value` is ignored)
+"""
 enum FilterOperator {
   EQ
   NEQ
@@ -26,24 +66,43 @@ enum FilterOperator {
   IS_NOT_NULL
 }
 
+"""Join logic for multiple filter criteria."""
 enum FilterLogic {
   AND
   OR
 }
 
+"""A single filter condition applied to a field."""
 input FilterCriteria {
+  """Field name to filter on (e.g. "title", "created_at")."""
   field: String!
+  """Comparison operator."""
   operator: FilterOperator!
+  """
+  Value to compare against. Ignored for `IS_NULL` / `IS_NOT_NULL`.
+  For `CONTAINS`, performs a case-insensitive substring match.
+  """
   value: String
 }
 
+"""Group of filter criteria combined with a logical operator."""
 input FilterInput {
+  """List of filter criteria. An empty list returns all items."""
   filters: [FilterCriteria!]
+  """How to combine criteria. Default: AND."""
   logic: FilterLogic! = AND
 }
 
+"""
+Standard response interface for all mutations.
+
+Provides a consistent contract: every mutation returns `code`, `success`, and optionally `message`.
+"""
 interface MutationResponse {
+  """HTTP-style status code (200 = success, 4xx = client error, 5xx = server error)."""
   code: Int!
+  """Whether the mutation was successful."""
   success: Boolean!
+  """Human-readable message. Present when success is false."""
   message: String
 }

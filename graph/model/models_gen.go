@@ -43,11 +43,13 @@ type Mutation struct {
 }
 
 type NewNote struct {
+	Title   string `json:"title"`
 	Content string `json:"content"`
 }
 
 type Note struct {
 	ID         string    `json:"id"`
+	Title      string    `json:"title"`
 	Content    string    `json:"content"`
 	CreatedAt  time.Time `json:"createdAt"`
 	ModifiedAt time.Time `json:"modifiedAt"`
@@ -72,21 +74,30 @@ func (this NoteResponse) GetSuccess() bool    { return this.Success }
 func (this NoteResponse) GetMessage() *string { return this.Message }
 
 type PageInfo struct {
-	Page       int32 `json:"page"`
-	PageSize   int32 `json:"pageSize"`
-	Total      int32 `json:"total"`
-	TotalPages int32 `json:"totalPages"`
+	StartCursor     *string `json:"startCursor,omitempty"`
+	EndCursor       *string `json:"endCursor,omitempty"`
+	HasNextPage     bool    `json:"hasNextPage"`
+	HasPreviousPage bool    `json:"hasPreviousPage"`
 }
 
 type PageInput struct {
-	Page     int32 `json:"page"`
-	PageSize int32 `json:"pageSize"`
+	First  *int32       `json:"first,omitempty"`
+	After  *string      `json:"after,omitempty"`
+	Last   *int32       `json:"last,omitempty"`
+	Before *string      `json:"before,omitempty"`
+	Sort   []*SortField `json:"sort,omitempty"`
 }
 
 type Query struct {
 }
 
+type SortField struct {
+	Field string `json:"field"`
+	Asc   bool   `json:"asc"`
+}
+
 type UpdateNoteInput struct {
+	Title   *string `json:"title,omitempty"`
 	Content *string `json:"content,omitempty"`
 }
 
