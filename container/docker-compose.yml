@@ -11,15 +11,10 @@ services:
       PORT: "4000"
       DEBUG: "true"
       PROD: "false"
-      JWT_SECRET: "dev-secret"
-      DATABASE_URL: "postgres://postgres:postgres@db:5432/app_db?sslmode=disable"
-      DB_HOST: db
-      DB_PORT: "5432"
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_NAME: app_db
+      JWT_SECRET: "${JWT_SECRET:-dev-secret}"
+      DATABASE_URL: "${DATABASE_URL:-postgres://postgres:postgres@db:5432/app_db?sslmode=disable}"
     ports:
-      - "4000:4000"
+      - "${PORT:-4000}:4000"
       - "4444:4444"
     volumes:
       - ../:${PWD}

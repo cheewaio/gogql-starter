@@ -41,7 +41,7 @@ The app runs at `http://localhost:4000/graphql` with **Apollo Sandbox** — a fu
 
 ### Environment Variables (Docker)
 
-All env vars have sensible defaults in `container/docker-compose.yml`. No `.env` file needed.
+All env vars have sensible defaults in `container/docker-compose.yml`. Copy `.env.example` to `.env` if you need to override them.
 
 | Variable | Default | Description |
 |---|---|---|
