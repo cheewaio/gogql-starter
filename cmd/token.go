@@ -1,3 +1,5 @@
+// Package main provides the CLI entry point. Invoked as `go run ./cmd token <username>`
+// to generate a development JWT for testing.
 package main
 
 import (

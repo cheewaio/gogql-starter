@@ -1,7 +1,12 @@
+// Package config loads application configuration from environment variables.
+// It provides a single Load() function that returns a Config struct with
+// sensible defaults for local development.
 package config
 
 import "os"
 
+// Config holds the application-level configuration values sourced from
+// environment variables.
 type Config struct {
 	Port                string
 	DatabaseURL         string
@@ -9,6 +14,8 @@ type Config struct {
 	EnableIntrospection bool
 }
 
+// Load reads environment variables and returns a populated Config.
+// Missing optional variables fall back to sensible defaults.
 func Load() Config {
 	return Config{
 		Port:                getEnv("PORT", "4000"),
@@ -18,6 +25,8 @@ func Load() Config {
 	}
 }
 
+// getEnv returns the value of the environment variable named by key, or
+// fallback if the variable is not set.
 func getEnv(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v

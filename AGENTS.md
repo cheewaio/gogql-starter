@@ -22,6 +22,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - After modifying the schema, run `task generate` to update `graph/generated.go`, `graph/model/models_gen.go`, and resolver stubs.
 - Development server uses **Apollo Sandbox** as the GraphQL IDE (served when `DEBUG=true`).
 - **Introspection bypass**: The auth middleware at `internal/auth/middleware.go:27` detects `__schema` queries and allows them through without authentication, so the IDE can fetch the schema immediately.
+- **Pagination**: Uses `PaginationInput` with `mode: CURSOR` (default) or `mode: OFFSET`. Returns `PaginationMetadata` with either `CursorPage` or `OffsetPage` in `next`/`previous`. No cursor → first cursor page; non-empty cursor → page after that cursor. Page numbers are 0-based.
+- **Cursor encoding**: Binary format (`[nVals][len1][val1]...[lenN][valN][16B UUID]`) in `internal/store/cursor.go:EncodeCursor` / `DecodeCursor`. Timestamp sort values use Unix millis for compactness.
 
 ### Code Generation
 - **gqlgen** (`task gen:gqlgen`): Generates GraphQL server code from schema files.
@@ -41,8 +43,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     - `graph/*.graphql`: GraphQL schema files (reside in `graph/`).
     - `graph/resolver.go`: Root resolver with injected `*store.Queries`.
     - `graph/*.resolvers.go`: Resolver implementations for each schema file.
+    - `graph/helpers.go`: Hand-written package-level helpers (e.g. `userID()` for deterministic UUID from username).
     - `graph/generated.go` & `graph/model/`: Auto-generated code by `gqlgen`.
-- **Data Layer**: `internal/store/` combines sqlc-generated CRUD (`note.sql.go`, `models.go`) with hand-written custom queries (`query.go`). The `NewDB()` connection factory lives here too.
+- **Data Layer**: `internal/store/` combines sqlc-generated CRUD (`note.sql.go`, `models.go`) with hand-written custom queries (`queries.go`, `cursor.go`). The `NewDB()` connection factory lives here too.
 - **Auth**: `internal/auth/` handles JWT token validation and user context. Introspection queries automatically bypass auth (see `isIntrospectionRequest` at `internal/auth/middleware.go:27`).
 - **Service Layer**: `internal/service/` wraps business logic, keeping resolvers thin.
 - **Database**:

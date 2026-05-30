@@ -29,10 +29,10 @@ input UpdateNoteInput {
   content: String
 }
 
-"""A paginated list of notes wrapped with cursor-based pagination metadata."""
+"""A paginated list of notes wrapped with pagination metadata."""
 type NoteConnection {
   items: [Note!]!
-  pageInfo: PageInfo!
+  pagination: PaginationMetadata!
 }
 
 type NoteResponse implements MutationResponse {
@@ -56,10 +56,10 @@ extend type Query {
   """
   Paginated list of notes owned by the current user.
 
-  Supports cursor-based pagination (`PageInput`), dynamic filtering (`FilterInput`),
-  and custom sorting (`SortField`). Requires authentication.
+  Supports offset-based (`pageNumber`) and cursor-based (`cursor`) pagination,
+  dynamic filtering, sorting, and search. Requires authentication.
   """
-  notes(input: PageInput, filter: FilterInput): NoteConnection!
+  notes(input: PaginationInput): NoteConnection!
 }
 
 extend type Mutation {

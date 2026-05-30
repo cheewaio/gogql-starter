@@ -24,6 +24,9 @@ func writeUnauthorized(w http.ResponseWriter) {
 	})
 }
 
+// isIntrospectionRequest checks whether the HTTP request contains a GraphQL
+// introspection query (__schema). The request body is read and re-wound via
+// io.NopCloser so downstream handlers (gqlgen) can still read it.
 func isIntrospectionRequest(r *http.Request) bool {
 	if r.Method == http.MethodGet {
 		return strings.Contains(r.URL.RawQuery, "__schema")
@@ -44,6 +47,9 @@ func isIntrospectionRequest(r *http.Request) bool {
 	return strings.Contains(req.Query, "__schema")
 }
 
+// Middleware returns an HTTP middleware that enforces JWT authentication on
+// every request. Introspection (__schema) queries bypass auth so that Apollo
+// Sandbox and other GraphQL IDEs can fetch the schema immediately.
 func Middleware(secret string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

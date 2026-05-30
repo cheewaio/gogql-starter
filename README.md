@@ -68,6 +68,37 @@ task hooks:install  # Install pre-commit git hook (lints staged Go files)
 task hooks:uninstall # Remove pre-commit git hook
 ```
 
+### Pagination
+
+The API supports two pagination modes via `PaginationInput.mode` (default: `CURSOR`):
+
+**Cursor-based** — infinite scroll / "load more":
+```graphql
+# First page (no cursor needed)
+{ notes(input: { pageSize: 10 }) { items { ... } pagination { next { ... on CursorPage { cursor } } } } }
+
+# Next page (use cursor from response)
+{ notes(input: { pageSize: 10, cursor: "<opaque-cursor>" }) { items { ... } } }
+```
+
+**Offset-based** — page selector / jump-to-page:
+```graphql
+{ notes(input: { mode: OFFSET, pageSize: 10, pageNumber: 0 }) { items { ... } } }
+{ notes(input: { mode: OFFSET, pageSize: 10, pageNumber: 2 }) { items { ... } } }
+```
+
+Both modes support sorting and filtering:
+```graphql
+{ notes(input: {
+    pageSize: 10,
+    sort: [{ field: "title", order: ASC }],
+    filter: { filters: [{ field: "title", operator: CONTAINS, value: "foo" }] }
+  }) { items { ... } pagination { total } }
+}
+```
+
+Page numbers are **0-based** (first page = 0). The `PaginationMetadata.next`/`previous` fields indicate available pages for either mode.
+
 ### Adding a New Feature
 
 1. **Database**: Add a migration in `database/migrations/` and a query in `database/queries/`.

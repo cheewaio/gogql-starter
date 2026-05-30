@@ -7,6 +7,7 @@ import (
 	"github.com/cheewaio/gogql-starter/internal/store"
 )
 
+// clamp restricts v to the inclusive range [min, max].
 func clamp(v, min, max int32) int32 {
 	if v < min {
 		return min
@@ -17,54 +18,40 @@ func clamp(v, min, max int32) int32 {
 	return v
 }
 
-func parseQueryInput(input *model.PageInput, filter *model.FilterInput) (store.QueryInput, error) {
+// parseQueryInput converts a GraphQL PaginationInput into the internal
+// store.QueryInput, decoding cursors and normalizing defaults. It selects
+// cursor-based or offset-based pagination based on the Mode field.
+func parseQueryInput(input *model.PaginationInput) (store.QueryInput, error) {
 	var q store.QueryInput
 
-	switch {
-	case input != nil && input.Before != nil:
-		sortVals, id, err := store.DecodeCursor(*input.Before)
-		if err != nil {
-			return q, fmt.Errorf("invalid before cursor: %w", err)
-		}
-		q.Before = &store.Cursor{SortValues: sortVals, ID: id}
+	pageSize := int32(20)
+	if input != nil && input.PageSize != nil {
+		pageSize = clamp(*input.PageSize, 1, 100)
+	}
+	q.PageSize = pageSize
 
-		q.Last = 10
-		if input.Last != nil {
-			q.Last = clamp(*input.Last, 1, 50)
-		} else if input.First != nil {
-			return q, fmt.Errorf("last must be used with before, not first")
-		}
+	mode := model.PaginationModeCursor
+	if input != nil && input.Mode != nil {
+		mode = *input.Mode
+	}
 
-		if input.After != nil {
-			return q, fmt.Errorf("after and before cannot be used together")
-		}
-
-	case input != nil && input.After != nil:
-		sortVals, id, err := store.DecodeCursor(*input.After)
-		if err != nil {
-			return q, fmt.Errorf("invalid after cursor: %w", err)
-		}
-		q.After = &store.Cursor{SortValues: sortVals, ID: id}
-
-		q.First = 10
-		if input.First != nil {
-			q.First = clamp(*input.First, 1, 50)
-		} else if input.Last != nil {
-			return q, fmt.Errorf("first must be used with after, not last")
+	switch mode {
+	case model.PaginationModeCursor:
+		q.First = pageSize
+		if input != nil && input.Cursor != nil && *input.Cursor != "" {
+			sortVals, id, err := store.DecodeCursor(*input.Cursor)
+			if err != nil {
+				return q, fmt.Errorf("invalid cursor: %w", err)
+			}
+			q.After = &store.Cursor{SortValues: sortVals, ID: id}
 		}
 
-		if input.Before != nil {
-			return q, fmt.Errorf("after and before cannot be used together")
+	case model.PaginationModeOffset:
+		pageNumber := int32(0)
+		if input != nil && input.PageNumber != nil {
+			pageNumber = *input.PageNumber
 		}
-
-	default:
-		q.First = 10
-		if input != nil && input.First != nil {
-			q.First = clamp(*input.First, 1, 50)
-		} else if input != nil && input.Last != nil {
-			q.Last = clamp(*input.Last, 1, 50)
-			q.First = 0
-		}
+		q.PageNumber = &pageNumber
 	}
 
 	if input != nil && input.Sort != nil {
@@ -72,18 +59,21 @@ func parseQueryInput(input *model.PageInput, filter *model.FilterInput) (store.Q
 			if sf != nil {
 				q.Sort = append(q.Sort, store.SortField{
 					Field: sf.Field,
-					Asc:   sf.Asc,
+					Asc:   sf.Order != nil && *sf.Order == model.SortOrderAsc,
 				})
 			}
 		}
 	}
 
-	q.FilterLogic = model.FilterLogicAnd
-	if filter != nil {
-		if filter.Filters != nil {
-			q.Filters = filter.Filters
+	if input != nil && input.Filter != nil {
+		if input.Filter.Filters != nil {
+			q.Filters = input.Filter.Filters
 		}
-		q.FilterLogic = filter.Logic
+		q.FilterLogic = input.Filter.Logic
+	}
+
+	if input != nil && input.Search != nil {
+		q.Search = input.Search
 	}
 
 	return q, nil

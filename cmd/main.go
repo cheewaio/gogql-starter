@@ -1,7 +1,8 @@
+// cmd/gogql-starter is the application entry point. It loads configuration,
+// runs database migrations, and starts the HTTP server with a GraphQL handler.
 package main
 
 import (
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -126,14 +127,16 @@ func startServer(port string) {
 		}))
 	}
 
-	log.Printf("connect to http://localhost:%s/graphql", port) //nolint:gosec
+	slog.Info("server listening", "addr", ":"+port, "graphql", "/graphql")
 	httpServer := &http.Server{
 		Addr:         ":" + port,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  120 * time.Second,
 	}
-	log.Fatal(httpServer.ListenAndServe())
+	if err := httpServer.ListenAndServe(); err != nil {
+		slog.Error("server exited", "error", err)
+	}
 }
 
 func orDefault(key, fallback string) string {

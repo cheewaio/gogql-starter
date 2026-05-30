@@ -1,3 +1,7 @@
+// Package service implements application business logic on top of the store
+// layer. It enforces authorization (users can only access their own notes),
+// provides structured logging for audit-worthy operations, and translates
+// store-level errors into user-facing messages.
 package service
 
 import (
@@ -10,14 +14,18 @@ import (
 	"github.com/google/uuid"
 )
 
+// NoteService wraps store.Queries to provide business-logic methods for note
+// CRUD operations with ownership checks and logging.
 type NoteService struct {
 	queries *store.Queries
 }
 
+// NewNoteService creates a new NoteService backed by the given queries.
 func NewNoteService(queries *store.Queries) *NoteService {
 	return &NoteService{queries: queries}
 }
 
+// Create inserts a new note for the given user and returns the created note.
 func (s *NoteService) Create(ctx context.Context, userID, username, title, content string) (*model.Note, error) {
 	uid, err := uuid.Parse(userID)
 	if err != nil {
@@ -44,6 +52,9 @@ func (s *NoteService) Create(ctx context.Context, userID, username, title, conte
 	}, nil
 }
 
+// GetByID retrieves a note by ID after verifying the requesting user owns it.
+// Returns "note not found" for both missing and unauthorized access to avoid
+// leaking note existence information.
 func (s *NoteService) GetByID(ctx context.Context, userID, noteID string) (*model.Note, error) {
 	uid, err := uuid.Parse(noteID)
 	if err != nil {
@@ -62,6 +73,9 @@ func (s *NoteService) GetByID(ctx context.Context, userID, noteID string) (*mode
 	return t, nil
 }
 
+// Update updates a note's title/content after verifying ownership. Returns
+// "note not found" for unauthorized access (same info-leak prevention as
+// GetByID).
 func (s *NoteService) Update(ctx context.Context, userID, noteID string, title, content *string) (*model.Note, error) {
 	uid, err := uuid.Parse(noteID)
 	if err != nil {
@@ -90,6 +104,8 @@ func (s *NoteService) Update(ctx context.Context, userID, noteID string, title, 
 	return t2, nil
 }
 
+// Delete deletes a note after verifying ownership. Returns "note not found"
+// for unauthorized access.
 func (s *NoteService) Delete(ctx context.Context, userID, noteID string) error {
 	uid, err := uuid.Parse(noteID)
 	if err != nil {
@@ -113,6 +129,8 @@ func (s *NoteService) Delete(ctx context.Context, userID, noteID string) error {
 	return nil
 }
 
+// List retrieves a paginated, filterable, searchable list of notes owned by
+// the given user.
 func (s *NoteService) List(ctx context.Context, userID string, input store.QueryInput) (*model.NoteConnection, error) {
 	uid, err := uuid.Parse(userID)
 	if err != nil {

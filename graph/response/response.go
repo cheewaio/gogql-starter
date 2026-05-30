@@ -1,3 +1,6 @@
+// Package response provides generic helpers for building consistent GraphQL
+// mutation responses. It uses reflection to set common fields (Success, Code,
+// Message) on any properly structured response type, avoiding boilerplate.
 package response
 
 import (
@@ -8,6 +11,9 @@ import (
 	"runtime"
 )
 
+// setFields uses reflection to populate the Success, Code, and Message fields
+// on a response struct by name. This keeps mutation resolvers concise — they
+// only need to return Success() or Failure() wrapping their response type.
 func setFields[T any](in *T, success bool, code int, message string) {
 	v := reflect.ValueOf(in)
 	if v.Kind() == reflect.Pointer {
@@ -36,6 +42,8 @@ func setFields[T any](in *T, success bool, code int, message string) {
 	}
 }
 
+// Success wraps a mutation response with success=true, code=200, and records
+// the caller location for debug logging.
 func Success[T any](_ context.Context, in *T) (*T, error) {
 	setFields(in, true, 200, "mutation succeeded")
 	_, file, line, _ := runtime.Caller(1)
@@ -43,6 +51,8 @@ func Success[T any](_ context.Context, in *T) (*T, error) {
 	return in, nil
 }
 
+// Failure wraps a mutation response with success=false, code=400, and records
+// the caller location and error for audit logging.
 func Failure[T any](_ context.Context, in *T, err error) (*T, error) {
 	setFields(in, false, 400, "mutation failed")
 	_, file, line, _ := runtime.Caller(1)

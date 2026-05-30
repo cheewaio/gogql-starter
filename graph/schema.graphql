@@ -2,48 +2,39 @@
 type Query
 type Mutation
 
+"""
+Standard response interface for all mutations.
+Provides a consistent contract: every mutation returns `code`, `success`, and optionally `message`.
+"""
+interface MutationResponse {
+  """HTTP-style status code (200 = success, 4xx = client error, 5xx = server error)."""
+  code: Int!
+  """Whether the mutation was successful."""
+  success: Boolean!
+  """Human-readable message. Present when success is false."""
+  message: String
+}
+
+"""
+Sort order for paginated queries. `ASC` for ascending order, `DESC` for descending order.
+"""
+enum SortOrder {
+  ASC
+  DESC
+}
+
+"""Pagination mode: cursor-based or offset-based."""
+enum PaginationMode {
+  CURSOR
+  OFFSET
+}
+
 """Sort direction for a single field in paginated queries."""
 input SortField {
   """Field name to sort by (e.g. "created_at", "title")."""
   field: String!
-  """True for ascending order, false for descending."""
-  asc: Boolean!
-}
-
-"""
-Cursor-based pagination input. Use one direction per request:
-
-- **Forward**: `first` + `after` → "Load more" / "Next page"
-- **Backward**: `last` + `before` → "Previous page"
-- **First page**: `first` with no cursor
-
-`first` and `last` are mutually exclusive. `after` and `before` are mutually exclusive.
-Defaults to `first: 10` when no cursor is provided.
-Values are clamped to [1, 50].
-"""
-input PageInput {
-  """Number of items to fetch when moving forward. Default: 10."""
-  first: Int
-  """Opaque cursor from a previous response's `endCursor`. Fetch items after this cursor."""
-  after: String
-  """Number of items to fetch when moving backward. Default: 10."""
-  last: Int
-  """Opaque cursor from a previous response's `startCursor`. Fetch items before this cursor."""
-  before: String
-  """Sort fields. Defaults to `[{ field: "created_at", asc: false }]` (newest first)."""
-  sort: [SortField!]
-}
-
-"""Pagination metadata returned with every paginated query."""
-type PageInfo {
-  """Cursor of the first item on this page. Pass as `before` to fetch the previous page. Null when the result set is empty."""
-  startCursor: String
-  """Cursor of the last item on this page. Pass as `after` to fetch the next page. Null when the result set is empty."""
-  endCursor: String
-  """Whether more items exist after this page."""
-  hasNextPage: Boolean!
-  """Whether more items exist before this page."""
-  hasPreviousPage: Boolean!
+  """Sort direction. Default: ASC."""
+  order: SortOrder = ASC
 }
 
 """
@@ -94,15 +85,71 @@ input FilterInput {
 }
 
 """
-Standard response interface for all mutations.
-
-Provides a consistent contract: every mutation returns `code`, `success`, and optionally `message`.
+Input type for search parameters in queries. Performs a full-text search across specified fields.
 """
-interface MutationResponse {
-  """HTTP-style status code (200 = success, 4xx = client error, 5xx = server error)."""
-  code: Int!
-  """Whether the mutation was successful."""
-  success: Boolean!
-  """Human-readable message. Present when success is false."""
-  message: String
+input SearchInput {
+  """Search query string. Performs a full-text search across relevant fields."""
+  query: String!
+  """List of specific fields to search within. If empty or not provided, searches all relevant fields."""
+  fields: [String!]
+}
+
+"""
+Input type for pagination parameters in queries. Supports both offset-based and cursor-based pagination, as well as sorting and filtering.
+"""
+input PaginationInput {
+  """Pagination mode. Default: CURSOR."""
+  mode: PaginationMode = CURSOR
+  """Number of items to return per page. Default: 20."""
+  pageSize: Int = 20
+  """If provided, uses offset-based pagination: page number to retrieve (0-based index)."""
+  pageNumber: Int
+  """If provided, uses cursor-based pagination: opaque cursor string from the previous page."""
+  cursor: String
+  """Search parameters for full-text search across specified fields. Default: no search (returns all items)."""
+  search: SearchInput
+  """List of sorting options. Default: empty (no sorting)."""
+  sort: [SortField!]
+  """Group of filter criteria to apply. Default: no filtering (returns all items)."""
+  filter: FilterInput
+}
+
+"""
+Base pagination interface. Extended by specific pagination types (offset-based, cursor-based).
+"""
+interface PaginationPage {
+  """Number of items per page."""
+  pageSize: Int!
+}
+
+"""
+Offset-based pagination page. Uses `pageNumber` to specify which page of results to return.
+"""
+type OffsetPage implements PaginationPage {
+  """Number of items per page."""
+  pageSize: Int!
+  """Page number to retrieve (0-based index)."""
+  pageNumber: Int!
+}
+
+"""
+Cursor-based pagination page. Uses `cursor` to specify which page of results to return.
+"""
+type CursorPage implements PaginationPage {
+  """Number of items per page.""" 
+  pageSize: Int!
+  """Opaque cursor string returned from the previous page. Use to fetch the next page of results."""
+  cursor: String!
+}
+
+"""
+Pagination metadata returned in paginated queries, including links to next/previous pages and total item count.
+"""
+type PaginationMetadata {
+  """Information about the current page of results."""
+  next: PaginationPage
+  """Information about the previous page of results."""
+  previous: PaginationPage
+  """Total number of items across all pages (ignoring pagination)."""
+  total: Int!
 }

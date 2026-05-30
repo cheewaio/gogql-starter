@@ -1,3 +1,6 @@
+// Package store provides the data access layer backed by PostgreSQL. It
+// combines sqlc-generated CRUD operations with hand-written custom queries
+// for pagination, filtering, search, and partial updates.
 package store
 
 import (
@@ -9,6 +12,9 @@ import (
 	_ "github.com/lib/pq" // PostgreSQL driver
 )
 
+// NewDB opens a PostgreSQL connection pool, configures connection limits and
+// timeouts, and verifies reachability with a ping. Closing the returned *sql.DB
+// is the caller's responsibility.
 func NewDB(databaseURL string) (*sql.DB, error) {
 	db, err := sql.Open("postgres", databaseURL)
 	if err != nil {

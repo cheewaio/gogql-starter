@@ -10,12 +10,37 @@ import (
 	"time"
 )
 
+// Standard response interface for all mutations.
+// Provides a consistent contract: every mutation returns `code`, `success`, and optionally `message`.
 type MutationResponse interface {
 	IsMutationResponse()
+	// HTTP-style status code (200 = success, 4xx = client error, 5xx = server error).
 	GetCode() int32
+	// Whether the mutation was successful.
 	GetSuccess() bool
+	// Human-readable message. Present when success is false.
 	GetMessage() *string
 }
+
+// Base pagination interface. Extended by specific pagination types (offset-based, cursor-based).
+type PaginationPage interface {
+	IsPaginationPage()
+	// Number of items per page.
+	GetPageSize() int32
+}
+
+// Cursor-based pagination page. Uses `cursor` to specify which page of results to return.
+type CursorPage struct {
+	// Number of items per page.
+	PageSize int32 `json:"pageSize"`
+	// Opaque cursor string returned from the previous page. Use to fetch the next page of results.
+	Cursor string `json:"cursor"`
+}
+
+func (CursorPage) IsPaginationPage() {}
+
+// Number of items per page.
+func (this CursorPage) GetPageSize() int32 { return this.PageSize }
 
 type DeleteResponse struct {
 	Code    int32   `json:"code"`
@@ -23,42 +48,60 @@ type DeleteResponse struct {
 	Message *string `json:"message,omitempty"`
 }
 
-func (DeleteResponse) IsMutationResponse()      {}
-func (this DeleteResponse) GetCode() int32      { return this.Code }
-func (this DeleteResponse) GetSuccess() bool    { return this.Success }
+func (DeleteResponse) IsMutationResponse() {}
+
+// HTTP-style status code (200 = success, 4xx = client error, 5xx = server error).
+func (this DeleteResponse) GetCode() int32 { return this.Code }
+
+// Whether the mutation was successful.
+func (this DeleteResponse) GetSuccess() bool { return this.Success }
+
+// Human-readable message. Present when success is false.
 func (this DeleteResponse) GetMessage() *string { return this.Message }
 
+// A single filter condition applied to a field.
 type FilterCriteria struct {
-	Field    string         `json:"field"`
+	// Field name to filter on (e.g. "title", "created_at").
+	Field string `json:"field"`
+	// Comparison operator.
 	Operator FilterOperator `json:"operator"`
-	Value    *string        `json:"value,omitempty"`
+	// Value to compare against. Ignored for `IS_NULL` / `IS_NOT_NULL`.
+	// For `CONTAINS`, performs a case-insensitive substring match.
+	Value *string `json:"value,omitempty"`
 }
 
+// Group of filter criteria combined with a logical operator.
 type FilterInput struct {
+	// List of filter criteria. An empty list returns all items.
 	Filters []*FilterCriteria `json:"filters,omitempty"`
-	Logic   FilterLogic       `json:"logic"`
+	// How to combine criteria. Default: AND.
+	Logic FilterLogic `json:"logic"`
 }
 
 type Mutation struct {
 }
 
+// Input for creating a new note. `title` is required.
 type NewNote struct {
 	Title   string `json:"title"`
 	Content string `json:"content"`
 }
 
+// A user-created note with title, content, and metadata.
 type Note struct {
 	ID         string    `json:"id"`
 	Title      string    `json:"title"`
 	Content    string    `json:"content"`
 	CreatedAt  time.Time `json:"createdAt"`
 	ModifiedAt time.Time `json:"modifiedAt"`
-	User       *User     `json:"user"`
+	// The user who owns this note.
+	User *User `json:"user"`
 }
 
+// A paginated list of notes wrapped with pagination metadata.
 type NoteConnection struct {
-	Items    []*Note   `json:"items"`
-	PageInfo *PageInfo `json:"pageInfo"`
+	Items      []*Note             `json:"items"`
+	Pagination *PaginationMetadata `json:"pagination"`
 }
 
 type NoteResponse struct {
@@ -68,44 +111,90 @@ type NoteResponse struct {
 	Note    *Note   `json:"note,omitempty"`
 }
 
-func (NoteResponse) IsMutationResponse()      {}
-func (this NoteResponse) GetCode() int32      { return this.Code }
-func (this NoteResponse) GetSuccess() bool    { return this.Success }
+func (NoteResponse) IsMutationResponse() {}
+
+// HTTP-style status code (200 = success, 4xx = client error, 5xx = server error).
+func (this NoteResponse) GetCode() int32 { return this.Code }
+
+// Whether the mutation was successful.
+func (this NoteResponse) GetSuccess() bool { return this.Success }
+
+// Human-readable message. Present when success is false.
 func (this NoteResponse) GetMessage() *string { return this.Message }
 
-type PageInfo struct {
-	StartCursor     *string `json:"startCursor,omitempty"`
-	EndCursor       *string `json:"endCursor,omitempty"`
-	HasNextPage     bool    `json:"hasNextPage"`
-	HasPreviousPage bool    `json:"hasPreviousPage"`
+// Offset-based pagination page. Uses `pageNumber` to specify which page of results to return.
+type OffsetPage struct {
+	// Number of items per page.
+	PageSize int32 `json:"pageSize"`
+	// Page number to retrieve (0-based index).
+	PageNumber int32 `json:"pageNumber"`
 }
 
-type PageInput struct {
-	First  *int32       `json:"first,omitempty"`
-	After  *string      `json:"after,omitempty"`
-	Last   *int32       `json:"last,omitempty"`
-	Before *string      `json:"before,omitempty"`
-	Sort   []*SortField `json:"sort,omitempty"`
+func (OffsetPage) IsPaginationPage() {}
+
+// Number of items per page.
+func (this OffsetPage) GetPageSize() int32 { return this.PageSize }
+
+// Input type for pagination parameters in queries. Supports both offset-based and cursor-based pagination, as well as sorting and filtering.
+type PaginationInput struct {
+	// Pagination mode. Default: CURSOR.
+	Mode *PaginationMode `json:"mode,omitempty"`
+	// Number of items to return per page. Default: 20.
+	PageSize *int32 `json:"pageSize,omitempty"`
+	// If provided, uses offset-based pagination: page number to retrieve (0-based index).
+	PageNumber *int32 `json:"pageNumber,omitempty"`
+	// If provided, uses cursor-based pagination: opaque cursor string from the previous page.
+	Cursor *string `json:"cursor,omitempty"`
+	// Search parameters for full-text search across specified fields. Default: no search (returns all items).
+	Search *SearchInput `json:"search,omitempty"`
+	// List of sorting options. Default: empty (no sorting).
+	Sort []*SortField `json:"sort,omitempty"`
+	// Group of filter criteria to apply. Default: no filtering (returns all items).
+	Filter *FilterInput `json:"filter,omitempty"`
+}
+
+// Pagination metadata returned in paginated queries, including links to next/previous pages and total item count.
+type PaginationMetadata struct {
+	// Information about the current page of results.
+	Next PaginationPage `json:"next,omitempty"`
+	// Information about the previous page of results.
+	Previous PaginationPage `json:"previous,omitempty"`
+	// Total number of items across all pages (ignoring pagination).
+	Total int32 `json:"total"`
 }
 
 type Query struct {
 }
 
-type SortField struct {
-	Field string `json:"field"`
-	Asc   bool   `json:"asc"`
+// Input type for search parameters in queries. Performs a full-text search across specified fields.
+type SearchInput struct {
+	// Search query string. Performs a full-text search across relevant fields.
+	Query string `json:"query"`
+	// List of specific fields to search within. If empty or not provided, searches all relevant fields.
+	Fields []string `json:"fields,omitempty"`
 }
 
+// Sort direction for a single field in paginated queries.
+type SortField struct {
+	// Field name to sort by (e.g. "created_at", "title").
+	Field string `json:"field"`
+	// Sort direction. Default: ASC.
+	Order *SortOrder `json:"order,omitempty"`
+}
+
+// Input for updating an existing note. All fields are optional — only provided fields are updated.
 type UpdateNoteInput struct {
 	Title   *string `json:"title,omitempty"`
 	Content *string `json:"content,omitempty"`
 }
 
+// A user of the system.
 type User struct {
 	ID       string `json:"id"`
 	Username string `json:"username"`
 }
 
+// Join logic for multiple filter criteria.
 type FilterLogic string
 
 const (
@@ -161,6 +250,12 @@ func (e FilterLogic) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// Comparison operators for dynamic filtering.
+//
+// - `EQ` / `NEQ`: exact match / not equal
+// - `CONTAINS`: case-insensitive substring match
+// - `GT` / `GTE` / `LT` / `LTE`: comparisons (works on timestamps, numbers, strings)
+// - `IS_NULL` / `IS_NOT_NULL`: null checks (`value` is ignored)
 type FilterOperator string
 
 const (
@@ -225,6 +320,118 @@ func (e *FilterOperator) UnmarshalJSON(b []byte) error {
 }
 
 func (e FilterOperator) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// Pagination mode: cursor-based or offset-based.
+type PaginationMode string
+
+const (
+	PaginationModeCursor PaginationMode = "CURSOR"
+	PaginationModeOffset PaginationMode = "OFFSET"
+)
+
+var AllPaginationMode = []PaginationMode{
+	PaginationModeCursor,
+	PaginationModeOffset,
+}
+
+func (e PaginationMode) IsValid() bool {
+	switch e {
+	case PaginationModeCursor, PaginationModeOffset:
+		return true
+	}
+	return false
+}
+
+func (e PaginationMode) String() string {
+	return string(e)
+}
+
+func (e *PaginationMode) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = PaginationMode(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid PaginationMode", str)
+	}
+	return nil
+}
+
+func (e PaginationMode) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *PaginationMode) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e PaginationMode) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// Sort order for paginated queries. `ASC` for ascending order, `DESC` for descending order.
+type SortOrder string
+
+const (
+	SortOrderAsc  SortOrder = "ASC"
+	SortOrderDesc SortOrder = "DESC"
+)
+
+var AllSortOrder = []SortOrder{
+	SortOrderAsc,
+	SortOrderDesc,
+}
+
+func (e SortOrder) IsValid() bool {
+	switch e {
+	case SortOrderAsc, SortOrderDesc:
+		return true
+	}
+	return false
+}
+
+func (e SortOrder) String() string {
+	return string(e)
+}
+
+func (e *SortOrder) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = SortOrder(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid SortOrder", str)
+	}
+	return nil
+}
+
+func (e SortOrder) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *SortOrder) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e SortOrder) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

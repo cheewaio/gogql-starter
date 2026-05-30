@@ -9,8 +9,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/google/uuid"
-
 	"github.com/cheewaio/gogql-starter/graph/model"
 	"github.com/cheewaio/gogql-starter/graph/response"
 )
@@ -21,7 +19,7 @@ func (r *mutationResolver) CreateNote(ctx context.Context, input model.NewNote) 
 	if user == nil {
 		return response.Failure(ctx, &model.NoteResponse{}, fmt.Errorf("authentication required"))
 	}
-	note, err := r.NoteService.Create(ctx, user.Username, user.Username, input.Title, input.Content)
+	note, err := r.NoteService.Create(ctx, userID(user.Username), user.Username, input.Title, input.Content)
 	if err != nil {
 		return response.Failure(ctx, &model.NoteResponse{}, err)
 	}
@@ -34,7 +32,7 @@ func (r *mutationResolver) UpdateNote(ctx context.Context, id string, input mode
 	if user == nil {
 		return response.Failure(ctx, &model.NoteResponse{}, fmt.Errorf("authentication required"))
 	}
-	note, err := r.NoteService.Update(ctx, user.Username, id, input.Title, input.Content)
+	note, err := r.NoteService.Update(ctx, userID(user.Username), id, input.Title, input.Content)
 	if err != nil {
 		return response.Failure(ctx, &model.NoteResponse{}, err)
 	}
@@ -47,7 +45,7 @@ func (r *mutationResolver) DeleteNote(ctx context.Context, id string) (*model.De
 	if user == nil {
 		return response.Failure(ctx, &model.DeleteResponse{}, fmt.Errorf("authentication required"))
 	}
-	if err := r.NoteService.Delete(ctx, user.Username, id); err != nil {
+	if err := r.NoteService.Delete(ctx, userID(user.Username), id); err != nil {
 		return response.Failure(ctx, &model.DeleteResponse{}, err)
 	}
 	return response.Success(ctx, &model.DeleteResponse{})
@@ -59,8 +57,7 @@ func (r *queryResolver) Me(ctx context.Context) (*model.User, error) {
 	if user == nil {
 		return nil, fmt.Errorf("authentication required")
 	}
-	id := uuid.NewSHA1(uuid.NameSpaceDNS, []byte(user.Username)).String()
-	return &model.User{ID: id, Username: user.Username}, nil
+	return &model.User{ID: userID(user.Username), Username: user.Username}, nil
 }
 
 // Note is the resolver for the note field.
@@ -69,18 +66,18 @@ func (r *queryResolver) Note(ctx context.Context, id string) (*model.Note, error
 	if user == nil {
 		return nil, fmt.Errorf("authentication required")
 	}
-	return r.NoteService.GetByID(ctx, user.Username, id)
+	return r.NoteService.GetByID(ctx, userID(user.Username), id)
 }
 
 // Notes is the resolver for the notes field.
-func (r *queryResolver) Notes(ctx context.Context, input *model.PageInput, filter *model.FilterInput) (*model.NoteConnection, error) {
+func (r *queryResolver) Notes(ctx context.Context, input *model.PaginationInput) (*model.NoteConnection, error) {
 	user := r.GetCurrentUser(ctx)
 	if user == nil {
 		return nil, fmt.Errorf("authentication required")
 	}
-	q, err := parseQueryInput(input, filter)
+	q, err := parseQueryInput(input)
 	if err != nil {
 		return nil, err
 	}
-	return r.NoteService.List(ctx, user.Username, q)
+	return r.NoteService.List(ctx, userID(user.Username), q)
 }
