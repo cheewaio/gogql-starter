@@ -33,7 +33,7 @@ type PaginationPage interface {
 type CursorPage struct {
 	// Number of items per page.
 	PageSize int32 `json:"pageSize"`
-	// Opaque cursor string returned from the previous page. Use to fetch the next page of results.
+	// Opaque cursor string returned from pagination metadata.
 	Cursor string `json:"cursor"`
 }
 
@@ -143,7 +143,7 @@ type PaginationInput struct {
 	PageSize *int32 `json:"pageSize,omitempty"`
 	// If provided, uses offset-based pagination: page number to retrieve (0-based index).
 	PageNumber *int32 `json:"pageNumber,omitempty"`
-	// If provided, uses cursor-based pagination: opaque cursor string from the previous page.
+	// If provided, returns the page indicated by this opaque cursor.
 	Cursor *string `json:"cursor,omitempty"`
 	// Search parameters for full-text search across specified fields. Default: no search (returns all items).
 	Search *SearchInput `json:"search,omitempty"`

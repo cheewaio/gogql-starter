@@ -30,6 +30,23 @@ func parseQueryInput(input *model.PaginationInput) (store.QueryInput, error) {
 	}
 	q.PageSize = pageSize
 
+	if err := applyPagination(&q, input, pageSize); err != nil {
+		return q, err
+	}
+	if err := applySort(&q, input); err != nil {
+		return q, err
+	}
+	if err := applyFilter(&q, input); err != nil {
+		return q, err
+	}
+	if err := applySearch(&q, input); err != nil {
+		return q, err
+	}
+
+	return q, nil
+}
+
+func applyPagination(q *store.QueryInput, input *model.PaginationInput, pageSize int32) error {
 	mode := model.PaginationModeCursor
 	if input != nil && input.Mode != nil {
 		mode = *input.Mode
@@ -39,42 +56,92 @@ func parseQueryInput(input *model.PaginationInput) (store.QueryInput, error) {
 	case model.PaginationModeCursor:
 		q.First = pageSize
 		if input != nil && input.Cursor != nil && *input.Cursor != "" {
-			sortVals, id, err := store.DecodeCursor(*input.Cursor)
+			cursor, direction, err := decodeCursor(*input.Cursor)
 			if err != nil {
-				return q, fmt.Errorf("invalid cursor: %w", err)
+				return err
 			}
-			q.After = &store.Cursor{SortValues: sortVals, ID: id}
+			switch direction {
+			case store.CursorDirectionNext:
+				q.After = cursor
+			case store.CursorDirectionPrevious:
+				q.First = 0
+				q.Last = pageSize
+				q.Before = cursor
+			}
 		}
 
 	case model.PaginationModeOffset:
 		pageNumber := int32(0)
 		if input != nil && input.PageNumber != nil {
 			pageNumber = *input.PageNumber
+			if pageNumber < 0 {
+				pageNumber = 0
+			}
 		}
 		q.PageNumber = &pageNumber
 	}
+	return nil
+}
 
+func applySort(q *store.QueryInput, input *model.PaginationInput) error {
 	if input != nil && input.Sort != nil {
 		for _, sf := range input.Sort {
 			if sf != nil {
+				field, err := store.NormalizeNoteField(sf.Field)
+				if err != nil {
+					return err
+				}
 				q.Sort = append(q.Sort, store.SortField{
-					Field: sf.Field,
+					Field: field,
 					Asc:   sf.Order != nil && *sf.Order == model.SortOrderAsc,
 				})
 			}
 		}
 	}
+	return nil
+}
 
+func applyFilter(q *store.QueryInput, input *model.PaginationInput) error {
 	if input != nil && input.Filter != nil {
-		if input.Filter.Filters != nil {
-			q.Filters = input.Filter.Filters
+		for _, f := range input.Filter.Filters {
+			if f == nil {
+				continue
+			}
+			field, err := store.NormalizeNoteField(f.Field)
+			if err != nil {
+				return err
+			}
+			filter := *f
+			filter.Field = field
+			q.Filters = append(q.Filters, &filter)
 		}
 		q.FilterLogic = input.Filter.Logic
 	}
+	return nil
+}
 
+func applySearch(q *store.QueryInput, input *model.PaginationInput) error {
 	if input != nil && input.Search != nil {
-		q.Search = input.Search
+		search := *input.Search
+		if len(search.Fields) > 0 {
+			search.Fields = make([]string, 0, len(input.Search.Fields))
+			for _, field := range input.Search.Fields {
+				normalized, err := store.NormalizeNoteField(field)
+				if err != nil {
+					return err
+				}
+				search.Fields = append(search.Fields, normalized)
+			}
+		}
+		q.Search = &search
 	}
+	return nil
+}
 
-	return q, nil
+func decodeCursor(cursorInput string) (*store.Cursor, store.CursorDirection, error) {
+	sortVals, id, direction, err := store.DecodePageCursor(cursorInput)
+	if err != nil {
+		return nil, store.CursorDirectionNext, fmt.Errorf("invalid cursor: %w", err)
+	}
+	return &store.Cursor{SortValues: sortVals, ID: id}, direction, nil
 }

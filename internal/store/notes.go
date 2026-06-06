@@ -96,6 +96,22 @@ func (q *Queries) FindNotesPaginated(
 	return q.findNotesCursor(ctx, userID, input)
 }
 
+func normalizeSortFields(sortFields []SortField) ([]SortField, error) {
+	if len(sortFields) == 0 {
+		return []SortField{{Field: "created_at", Asc: false}}, nil
+	}
+
+	normalized := make([]SortField, 0, len(sortFields))
+	for _, sf := range sortFields {
+		field, err := NormalizeNoteField(sf.Field)
+		if err != nil {
+			return nil, err
+		}
+		normalized = append(normalized, SortField{Field: field, Asc: sf.Asc})
+	}
+	return normalized, nil
+}
+
 func (q *Queries) findNotesOffset(
 	ctx context.Context,
 	userID uuid.UUID,
@@ -111,16 +127,13 @@ func (q *Queries) findNotesOffset(
 	whereClauses = append(whereClauses, fmt.Sprintf("t.user_id = $%d", argIdx))
 	args = append(args, userID)
 
-	sortFields := input.Sort
-	if len(sortFields) == 0 {
-		sortFields = []SortField{{Field: "created_at", Asc: false}}
+	sortFields, err := normalizeSortFields(input.Sort)
+	if err != nil {
+		return nil, err
 	}
 
-	for _, f := range input.Filters {
-		if f == nil {
-			continue
-		}
-		clause, err := buildWhereClause(f, &argIdx, &args, "t")
+	if len(input.Filters) > 0 {
+		clause, err := buildFilterGroupClause(input.Filters, input.FilterLogic, &argIdx, &args, "t")
 		if err != nil {
 			return nil, fmt.Errorf("build filter: %w", err)
 		}
@@ -146,6 +159,9 @@ func (q *Queries) findNotesOffset(
 	pageNumber := int32(0)
 	if input.PageNumber != nil {
 		pageNumber = *input.PageNumber
+	}
+	if pageNumber < 0 {
+		pageNumber = 0
 	}
 	offset := pageNumber * pageSize
 
@@ -244,21 +260,21 @@ func (q *Queries) findNotesCursor(
 		limit = input.Last
 	}
 
-	sortFields := input.Sort
-	if len(sortFields) == 0 {
-		sortFields = []SortField{{Field: "created_at", Asc: false}}
+	sortFields, err := normalizeSortFields(input.Sort)
+	if err != nil {
+		return nil, err
 	}
 
 	if cursor != nil {
-		clause := buildCursorWhereClause(sortFields, cursor, forward, &argIdx, &args, "t")
+		clause, err := buildCursorWhereClause(sortFields, cursor, forward, &argIdx, &args, "t")
+		if err != nil {
+			return nil, fmt.Errorf("build cursor: %w", err)
+		}
 		whereClauses = append(whereClauses, clause)
 	}
 
-	for _, f := range input.Filters {
-		if f == nil {
-			continue
-		}
-		clause, err := buildWhereClause(f, &argIdx, &args, "t")
+	if len(input.Filters) > 0 {
+		clause, err := buildFilterGroupClause(input.Filters, input.FilterLogic, &argIdx, &args, "t")
 		if err != nil {
 			return nil, fmt.Errorf("build filter: %w", err)
 		}
@@ -305,6 +321,7 @@ func (q *Queries) findNotesCursor(
 	if err != nil {
 		return nil, err
 	}
+	items, hasMore := trimCursorItems(items, limit)
 
 	// When paginating backward (Before cursor), results come in descending sort
 	// order. Reverse them so the client receives items in ascending display order.
@@ -314,7 +331,7 @@ func (q *Queries) findNotesCursor(
 		}
 	}
 
-	cursorPageInfo := buildCursorPageInfo(items, sortFields, limit, forward, input.After != nil, input.Before != nil)
+	cursorPageInfo := buildCursorPageInfo(items, sortFields, limit, forward, input.After != nil, input.Before != nil, hasMore)
 
 	return &model.NoteConnection{
 		Items: cursorPageInfo.Items,
@@ -324,6 +341,13 @@ func (q *Queries) findNotesCursor(
 			Total:    total,
 		},
 	}, nil
+}
+
+func trimCursorItems(items []*model.Note, limit int32) ([]*model.Note, bool) {
+	if len(items) <= int(limit) {
+		return items, false
+	}
+	return items[:limit], true
 }
 
 // scanNoteRows iterates over sql.Rows and scans each row into a model.Note
@@ -399,16 +423,15 @@ type cursorPageInfo struct {
 // hasAfter/hasBefore track whether the client explicitly provided an
 // after/before cursor, which determines whether a previous/next page exists
 // on the other side.
-func buildCursorPageInfo(items []*model.Note, sortFields []SortField, limit int32, forward, hasAfter, hasBefore bool) cursorPageInfo {
+func buildCursorPageInfo(items []*model.Note, sortFields []SortField, limit int32, forward, hasAfter, hasBefore, hasMore bool) cursorPageInfo {
 	hasNextPage := false
 	hasPreviousPage := false
-	if len(items) > int(limit) {
+	if hasMore {
 		if forward {
 			hasNextPage = true
 		} else {
 			hasPreviousPage = true
 		}
-		items = items[:limit]
 	}
 
 	if hasPreviousPage || (forward && hasAfter) {
@@ -424,9 +447,9 @@ func buildCursorPageInfo(items []*model.Note, sortFields []SortField, limit int3
 
 	var startCursor, endCursor *string
 	if len(items) > 0 {
-		sc := EncodeCursor(sortValuesFromNote(items[0], sortFields), items[0].ID)
+		sc := EncodePageCursor(sortValuesFromNote(items[0], sortFields), items[0].ID, CursorDirectionPrevious)
 		startCursor = &sc
-		ec := EncodeCursor(sortValuesFromNote(items[len(items)-1], sortFields), items[len(items)-1].ID)
+		ec := EncodePageCursor(sortValuesFromNote(items[len(items)-1], sortFields), items[len(items)-1].ID, CursorDirectionNext)
 		endCursor = &ec
 	}
 

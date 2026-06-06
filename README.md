@@ -78,8 +78,13 @@ The API supports two pagination modes via `PaginationInput.mode` (default: `CURS
 { notes(input: { pageSize: 10 }) { items { ... } pagination { next { ... on CursorPage { cursor } } } } }
 
 # Next page (use cursor from response)
-{ notes(input: { pageSize: 10, cursor: "<opaque-cursor>" }) { items { ... } } }
+{ notes(input: { pageSize: 10, cursor: "<next-cursor>" }) { items { ... } } }
+
+# Previous page (use previous cursor from response)
+{ notes(input: { pageSize: 10, cursor: "<previous-cursor>" }) { items { ... } } }
 ```
+
+Cursors are opaque and self-describing; pass the returned cursor back unchanged.
 
 **Offset-based** — page selector / jump-to-page:
 ```graphql

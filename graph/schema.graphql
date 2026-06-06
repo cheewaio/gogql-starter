@@ -104,7 +104,7 @@ input PaginationInput {
   pageSize: Int = 20
   """If provided, uses offset-based pagination: page number to retrieve (0-based index)."""
   pageNumber: Int
-  """If provided, uses cursor-based pagination: opaque cursor string from the previous page."""
+  """If provided, returns the page indicated by this opaque cursor."""
   cursor: String
   """Search parameters for full-text search across specified fields. Default: no search (returns all items)."""
   search: SearchInput
@@ -138,7 +138,7 @@ Cursor-based pagination page. Uses `cursor` to specify which page of results to 
 type CursorPage implements PaginationPage {
   """Number of items per page.""" 
   pageSize: Int!
-  """Opaque cursor string returned from the previous page. Use to fetch the next page of results."""
+  """Opaque cursor string returned from pagination metadata."""
   cursor: String!
 }
 
